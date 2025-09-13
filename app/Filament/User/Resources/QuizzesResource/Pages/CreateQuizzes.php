@@ -809,7 +809,7 @@ class CreateQuizzes extends CreateRecord
                 }
             }
             
-            // Don't check progress immediately, wait a bit to avoid showing old progress
+            // Do not check progress immediately, wait a bit to avoid showing old progress
             setTimeout(checkProgress, 3000);
             setInterval(checkProgress, 3000);
         ');
