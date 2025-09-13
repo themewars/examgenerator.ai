@@ -446,6 +446,7 @@ class CreateQuizzes extends CreateRecord
         $aiType = getSetting()->ai_type;
 
         $totalQuestions = (int) $data['max_questions'];
+        $quizText = null; // Initialize quizText variable
 
         if ($aiType == Quiz::GEMINI_AI) {
             $geminiApiKey = getSetting()->gemini_api_key;
@@ -646,6 +647,14 @@ class CreateQuizzes extends CreateRecord
                 $quiz->delete();
                 $this->halt();
             }
+        } else {
+            // If no quizText was generated, show error
+            Notification::make()
+                ->danger()
+                ->title(__('AI Response Error'))
+                ->body(__('No response received from AI service. Please try again.'))
+                ->send();
+            $this->halt();
         }
 
         $this->halt();
