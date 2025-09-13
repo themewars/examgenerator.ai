@@ -23,10 +23,28 @@ class CreateQuizzes extends CreateRecord
 {
     protected static string $resource = QuizzesResource::class;
     
+    // Simple progress tracking
+    public bool $isGenerating = false;
+    public int $progressDone = 0;
+    public int $progressTotal = 0;
 
     protected static bool $canCreateAnother = false;
 
     public static $tab = Quiz::TEXT_TYPE;
+
+    protected function getProgressLabel(): string
+    {
+        if (!$this->isGenerating || $this->progressTotal <= 0) {
+            return __('Create Exam');
+        }
+        
+        $percentage = round(($this->progressDone / $this->progressTotal) * 100);
+        return __('Creating exam (:done/:total) :percent%', [
+            'done' => $this->progressDone,
+            'total' => $this->progressTotal,
+            'percent' => $percentage,
+        ]);
+    }
 
     public function currentActiveTab()
     {
@@ -523,6 +541,11 @@ class CreateQuizzes extends CreateRecord
                     $model = 'gpt-4o-mini';
                 }
                 
+                // Set up progress tracking
+                $this->isGenerating = true;
+                $this->progressTotal = $totalQuestions;
+                $this->progressDone = 0;
+                
                 \App\Jobs\GenerateQuizJob::dispatch(
                     quizId: $quiz->id,
                     model: $model,
@@ -536,6 +559,7 @@ class CreateQuizzes extends CreateRecord
                 return $quiz;
             } catch (\Throwable $e) {
                 \Log::error("Failed to create quiz or dispatch job: " . $e->getMessage());
+                $this->isGenerating = false;
                 $this->halt();
             }
         }
@@ -638,18 +662,34 @@ class CreateQuizzes extends CreateRecord
     protected function getFormActions(): array
     {
         $create = parent::getFormActions()[0]
-            ->label(__('Create Exam'))
+            ->label(fn () => $this->getProgressLabel())
             ->icon('heroicon-o-plus')
-            ->disabled(fn () => ((app(\App\Services\PlanValidationService::class)->canCreateExam()['allowed'] ?? true) === false))
+            ->disabled(fn () => $this->isGenerating || ((app(\App\Services\PlanValidationService::class)->canCreateExam()['allowed'] ?? true) === false))
             ->extraAttributes([
                 'wire:target' => 'create',
                 'wire:loading.attr' => 'disabled',
             ]);
 
-        return [
-            $create,
-            Action::make('cancel')->label(__('messages.common.cancel'))->color('gray')->url(QuizzesResource::getUrl('index')),
-        ];
+        $actions = [$create];
+        
+        // Add progress indicator if generating
+        if ($this->isGenerating) {
+            $actions[] = Action::make('progress')
+                ->label(__('Generating...'))
+                ->disabled()
+                ->color('info')
+                ->icon('heroicon-o-clock')
+                ->extraAttributes([
+                    'class' => 'animate-pulse',
+                ]);
+        }
+        
+        $actions[] = Action::make('cancel')
+            ->label(__('messages.common.cancel'))
+            ->color('gray')
+            ->url(QuizzesResource::getUrl('index'));
+            
+        return $actions;
     }
 
     protected function getHeaderActions(): array
@@ -661,5 +701,58 @@ class CreateQuizzes extends CreateRecord
     public function mount(): void
     {
         parent::mount();
+        
+        // Check for any processing quiz and update progress
+        $this->checkProgress();
+        
+        // Add JavaScript to periodically check progress
+        $this->js('
+            function checkQuizProgress() {
+                if (window.livewire) {
+                    window.livewire.find("' . $this->getId() . '").call("checkProgress");
+                }
+            }
+            
+            // Check progress every 3 seconds if generating
+            if (' . ($this->isGenerating ? 'true' : 'false') . ') {
+                setInterval(checkQuizProgress, 3000);
+            }
+        ');
+    }
+    
+    public function checkProgress(): void
+    {
+        $userId = auth()->id();
+        if (!$userId) return;
+        
+        // Find any quiz that's currently being processed by this user
+        $processingQuiz = Quiz::where('user_id', $userId)
+            ->where('generation_status', 'processing')
+            ->orderBy('created_at', 'desc')
+            ->first();
+            
+        if ($processingQuiz) {
+            $this->isGenerating = true;
+            $this->progressTotal = $processingQuiz->generation_progress_total ?? 0;
+            $this->progressDone = $processingQuiz->generation_progress_done ?? 0;
+            
+            // If completed, redirect to edit page
+            if ($processingQuiz->generation_status === 'completed') {
+                $this->isGenerating = false;
+                $this->progressDone = 0;
+                $this->progressTotal = 0;
+                
+                // Redirect to edit page after a short delay
+                $this->js('
+                    setTimeout(function() {
+                        window.location.href = "/user/quizzes/' . $processingQuiz->id . '/edit";
+                    }, 1000);
+                ');
+            }
+        } else {
+            $this->isGenerating = false;
+            $this->progressDone = 0;
+            $this->progressTotal = 0;
+        }
     }
 }
