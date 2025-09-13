@@ -454,96 +454,8 @@ class CreateQuizzes extends CreateRecord
         $totalQuestions = (int) $data['max_questions'];
         $this->progressTotal = $totalQuestions;
 
-        if ($aiType == Quiz::GEMINI_AI) {
-            $geminiApiKey = getSetting()->gemini_api_key;
-            $model = getSetting()->gemini_ai_model;
-
-            if (! $geminiApiKey) {
-                Notification::make()
-                    ->danger()
-                    ->title(__('messages.quiz.set_openai_key_at_env'))
-                    ->send();
-                $this->halt();
-            }
-
-            $geminiResponse = Http::withHeaders([
-                'Content-Type' => 'application/json',
-            ])->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$geminiApiKey}", [
-                'contents' => [
-                    [
-                        'parts' => [
-                            ['text' => $prompt],
-                        ],
-                    ],
-                ],
-            ]);
-
-            if ($geminiResponse->failed()) {
-                Notification::make()
-                    ->danger()
-                    ->title($geminiResponse->json()['error']['message'])
-                    ->send();
-                $this->halt();
-            }
-
-            $rawText = $geminiResponse->json()['candidates'][0]['content']['parts'][0]['text'] ?? null;
-            $quizText = preg_replace('/^```(?:json)?|```$/im', '', $rawText);
-        }
-        if ($aiType == Quiz::OPEN_AI) {
-            $key = getSetting()->open_api_key;
-            $openAiKey = (! empty($key)) ? $key : config('services.open_ai.open_api_key');
-            $model = getSetting()->open_ai_model;
-
-            if (! $openAiKey) {
-                Notification::make()
-                    ->danger()
-                    ->title(__('messages.quiz.set_openai_key_at_env'))
-                    ->send();
-                $this->halt();
-            }
-
-            try {
-                // Dynamic timeout based on question count
-                $timeout = $data['max_questions'] > 20 ? 300 : 180; // 5 minutes for large requests
-                
-                $quizResponse = Http::withToken($openAiKey)
-                    ->withHeaders([
-                        'Content-Type' => 'application/json',
-                    ])
-                    ->timeout($timeout)
-                    ->retry(3, 2000)
-                    ->post('https://api.openai.com/v1/chat/completions', [
-                        'model' => $model,
-                        'messages' => [
-                            [
-                                'role' => 'user',
-                                'content' => $prompt,
-                            ],
-                        ],
-                    ]);
-            } catch (\Exception $e) {
-                Notification::make()
-                    ->danger()
-                    ->title(__('API Connection Failed'))
-                    ->body(__('Unable to connect to OpenAI API. Please try again or contact support if the issue persists.'))
-                    ->send();
-                Log::error('OpenAI API connection error: ' . $e->getMessage());
-                $this->halt();
-            }
-
-            if ($quizResponse->failed()) {
-                $error = $quizResponse->json()['error']['message'] ?? 'Unknown error occurred';
-                Notification::make()->danger()->title(__('OpenAI Error'))->body($error)->send();
-                $this->halt();
-            }
-
-            $quizText = $quizResponse['choices'][0]['message']['content'] ?? null;
-            
-            // AI response received - continue to DB creation phase
-            if ($quizText) {
-                // keep inline indicator
-            }
-        }
+        // Skip synchronous API calls for faster response - go directly to async job dispatch
+        $quizText = null;
 
         // Always dispatch async job for automatic quiz generation
         if ($totalQuestions > 0) {
@@ -556,9 +468,17 @@ class CreateQuizzes extends CreateRecord
 
                 \Log::info("Created quiz {$quiz->id} for automatic async processing");
 
-                $model = getSetting()->open_ai_model;
-                if (empty($model)) {
-                    $model = 'gpt-4o-mini';
+                // Get AI model based on AI type
+                if ($aiType == Quiz::GEMINI_AI) {
+                    $model = getSetting()->gemini_ai_model;
+                    if (empty($model)) {
+                        $model = 'gemini-1.5-flash-latest';
+                    }
+                } else {
+                    $model = getSetting()->open_ai_model;
+                    if (empty($model)) {
+                        $model = 'gpt-4o-mini';
+                    }
                 }
                 
                 \App\Jobs\GenerateQuizJob::dispatch(
@@ -796,9 +716,9 @@ class CreateQuizzes extends CreateRecord
                 }, 1500);
             }
             
-            // Start checking progress
-            setTimeout(checkProgress, 3000);
-            setInterval(checkProgress, 3000);
+            // Start checking progress immediately and frequently
+            setTimeout(checkProgress, 1000);
+            setInterval(checkProgress, 2000);
         ');
     }
 }
