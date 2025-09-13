@@ -642,25 +642,8 @@ class CreateQuizzes extends CreateRecord
 
     protected function getHeaderActions(): array
     {
-        $planCheck = app(\App\Services\PlanValidationService::class)->canCreateExam();
-        $examsRemaining = isset($planCheck['remaining']) ? $planCheck['remaining'] : 0;
-        
-        $actions = [];
-        $actions[] = Action::make('exams_remaining')
-            ->label(__('Exams Remaining: ') . ($examsRemaining === -1 ? __('Unlimited') : $examsRemaining))
-            ->color($examsRemaining > 10 ? 'success' : ($examsRemaining > 0 ? 'warning' : 'danger'))
-            ->disabled()
-            ->icon('heroicon-o-clipboard-document-list');
-
-        // If no remaining exams, show disabled Create + upgrade hint
-        if ($examsRemaining === 0) {
-            $actions[] = Action::make('limit_reached')
-                ->label(__('Monthly exam limit reached'))
-                ->color('danger')
-                ->disabled();
-        }
-
-        return $actions;
+        // Exams Remaining button removed as requested
+        return [];
     }
 
     public function mount(): void

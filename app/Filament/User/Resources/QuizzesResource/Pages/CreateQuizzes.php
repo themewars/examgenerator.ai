@@ -23,23 +23,6 @@ class CreateQuizzes extends CreateRecord
 {
     protected static string $resource = QuizzesResource::class;
     
-    // Inline progress state
-    public bool $isProcessing = false;
-    public int $progressTotal = 0;
-    public int $progressCreated = 0;
-
-    protected function getProgressLabel(): string
-    {
-        if (! $this->isProcessing || $this->progressTotal <= 0) {
-            return '';
-        }
-        $percent = (int) round(($this->progressCreated / max(1, $this->progressTotal)) * 100);
-        return __('Creating... :created/:total (:percent%)', [
-            'created' => $this->progressCreated,
-            'total' => $this->progressTotal,
-            'percent' => $percent,
-        ]);
-    }
 
     protected static bool $canCreateAnother = false;
 
@@ -63,10 +46,6 @@ class CreateQuizzes extends CreateRecord
 
     protected function handleRecordCreation(array $data): Model
     {
-        // Initialize inline progress state (total is set after form data read)
-        $this->isProcessing = false; // Don't show progress until job is dispatched
-        $this->progressTotal = 0;
-        $this->progressCreated = 0;
 
         $userId = Auth::id();
         // Default active tab from user presets if available
@@ -435,9 +414,7 @@ class CreateQuizzes extends CreateRecord
 
         $aiType = getSetting()->ai_type;
 
-        // Initialize total for inline progress
         $totalQuestions = (int) $data['max_questions'];
-        $this->progressTotal = $totalQuestions;
 
         if ($aiType == Quiz::GEMINI_AI) {
             $geminiApiKey = getSetting()->gemini_api_key;
@@ -556,10 +533,6 @@ class CreateQuizzes extends CreateRecord
 
                 \Log::info("Dispatched GenerateQuizJob for quiz {$quiz->id}");
 
-                // Set UI inline progress and return immediately; page will poll quiz status
-                $this->isProcessing = true;
-                $this->progressTotal = $totalQuestions;
-                $this->progressCreated = 0;
                 return $quiz;
             } catch (\Throwable $e) {
                 \Log::error("Failed to create quiz or dispatch job: " . $e->getMessage());
@@ -577,9 +550,6 @@ class CreateQuizzes extends CreateRecord
 
             // Validate that we got valid questions
             if (!is_array($quizQuestions) || empty($quizQuestions)) {
-                $this->isProcessing = false;
-                $this->progressTotal = 0;
-                $this->progressCreated = 0;
                 $this->halt();
             }
 
@@ -591,9 +561,6 @@ class CreateQuizzes extends CreateRecord
                 $generatedQuestions = count($quizQuestions);
             } elseif ($generatedQuestions < $requestedQuestions) {
                 if ($generatedQuestions < 1) {
-                    $this->isProcessing = false;
-                    $this->progressTotal = 0;
-                    $this->progressCreated = 0;
                     $this->halt();
                 }
             }
@@ -627,8 +594,6 @@ class CreateQuizzes extends CreateRecord
                         ]);
                     }
                     $questionsCreated++;
-                    // Update inline progress for each question
-                    $this->progressCreated = $questionsCreated;
                 }
             }
 
@@ -641,21 +606,15 @@ class CreateQuizzes extends CreateRecord
                     // Silently ignore counter update errors to not block creation
                 }
 
-                // Mark complete; Filament will redirect per getRedirectUrl
-                $this->isProcessing = false;
 
                 return $quiz;
             } else {
                 // Delete the quiz if no questions were created
                 $quiz->delete();
-                $this->isProcessing = false;
-                $this->progressTotal = 0;
-                $this->progressCreated = 0;
                 $this->halt();
             }
         }
 
-        $this->isProcessing = false;
         $this->halt();
     }
 
@@ -681,137 +640,26 @@ class CreateQuizzes extends CreateRecord
         $create = parent::getFormActions()[0]
             ->label(__('Create Exam'))
             ->icon('heroicon-o-plus')
-            ->disabled(fn () => ($this->isProcessing || (app(\App\Services\PlanValidationService::class)->canCreateExam()['allowed'] ?? true) === false))
+            ->disabled(fn () => ((app(\App\Services\PlanValidationService::class)->canCreateExam()['allowed'] ?? true) === false))
             ->extraAttributes([
                 'wire:target' => 'create',
                 'wire:loading.attr' => 'disabled',
             ]);
 
-        $progress = Action::make('progress')
-            ->label(fn () => ($this->getProgressLabel() !== '' ? $this->getProgressLabel() : __('Creating... Please wait')))
-            ->disabled()
-            ->color('gray')
-            ->extraAttributes(fn () => [
-                'class' => $this->isProcessing ? '' : 'hidden',
-                'wire:loading.class.remove' => 'hidden',
-                'wire:loading' => '',
-                'wire:target' => 'create',
-            ]);
-
         return [
             $create,
-            $progress,
             Action::make('cancel')->label(__('messages.common.cancel'))->color('gray')->url(QuizzesResource::getUrl('index')),
         ];
     }
 
     protected function getHeaderActions(): array
     {
-        $planCheck = app(\App\Services\PlanValidationService::class)->canCreateExam();
-        $examsRemaining = isset($planCheck['remaining']) ? $planCheck['remaining'] : 0;
-        
-        $actions = [];
-        $actions[] = Action::make('exams_remaining')
-            ->label(__('Exams Remaining: ') . ($examsRemaining === -1 ? __('Unlimited') : $examsRemaining))
-            ->color($examsRemaining > 10 ? 'success' : ($examsRemaining > 0 ? 'warning' : 'danger'))
-            ->disabled()
-            ->icon('heroicon-o-clipboard-document-list');
-
-        // If no remaining exams, show disabled Create + upgrade hint
-        if ($examsRemaining === 0) {
-            $actions[] = Action::make('limit_reached')
-                ->label(__('Monthly exam limit reached'))
-                ->color('danger')
-                ->disabled();
-        }
-
-        return $actions;
+        // Exams Remaining button removed as requested
+        return [];
     }
 
     public function mount(): void
     {
         parent::mount();
-        
-        // Add progress bar for processing quizzes
-        $this->js('
-            console.log("Create page progress bar script loaded");
-            
-            // Add CSS for progress bar animation
-            var style = document.createElement("style");
-            style.textContent = "@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }";
-            document.head.appendChild(style);
-            
-            // Hide any existing progress bar on page load
-            hideProgressBar();
-            
-            function checkProgress() {
-                console.log("Checking progress...");
-                fetch("/api/quiz-progress")
-                .then(function(response) { 
-                    console.log("API Response status:", response.status);
-                    return response.json(); 
-                })
-                .then(function(data) {
-                    console.log("API Response data:", data);
-                    console.log("Quiz object:", data.quiz);
-                    console.log("Quiz status:", data.quiz ? data.quiz.status : "null");
-                    console.log("Quiz generation_status:", data.quiz ? data.quiz.generation_status : "null");
-                    
-                    // Only show progress if we have a processing quiz
-                    if (data.quiz && data.quiz.status === "processing") {
-                        console.log("Found processing quiz:", data.quiz.id);
-                        showProgressBar(data.quiz);
-                    } else {
-                        console.log("No processing quiz found or status:", data.quiz ? data.quiz.status : "null");
-                        // Hide progress bar if no processing quiz
-                        hideProgressBar();
-                    }
-                })
-                .catch(function(error) { console.error("API Error:", error); });
-            }
-            
-            function showProgressBar(quiz) {
-                console.log("showProgressBar called with quiz:", quiz);
-                var container = document.getElementById("live-progress-container");
-                console.log("Container exists:", !!container);
-                if (!container) {
-                    console.log("Creating progress bar container...");
-                    var html = "<div id=\\"live-progress-container\\" style=\\"position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:8px 16px;box-shadow:0 2px 8px rgba(0,0,0,0.15);\\"><div style=\\"display:flex;align-items:center;justify-content:space-between;\\"><div style=\\"display:flex;align-items:center;\\"><div style=\\"width:16px;height:16px;border:2px solid white;border-top:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-right:12px;\\"><\/div><div><div style=\\"font-size:14px;font-weight:500;\\">Generating Exam Questions...<\/div><div style=\\"font-size:12px;opacity:0.9;\\">Please wait while questions are being generated...<\/div><\/div><\/div><div><span id=\\"progress-text\\" style=\\"font-size:14px;font-weight:600;background:#3b82f6;color:white;padding:4px 8px;border-radius:4px;\\">0\/0 (0%)<\/span><\/div><\/div><div style=\\"margin-top:8px;width:100%;background:rgba(255,255,255,0.2);border-radius:9999px;height:4px;\\"><div id=\\"progress-bar\\" style=\\"background:white;height:4px;border-radius:9999px;transition:width 0.3s ease;width:0%;\\"><\/div><\/div><\/div>";
-                    document.body.insertAdjacentHTML("afterbegin", html);
-                    console.log("Progress bar container created!");
-                }
-                
-                var progressBar = document.getElementById("progress-bar");
-                var progressText = document.getElementById("progress-text");
-                
-                if (progressBar && progressText) {
-                    var percentage = quiz.progress_total > 0 ? Math.round((quiz.progress_done / quiz.progress_total) * 100) : 0;
-                    progressBar.style.width = percentage + "%";
-                    progressText.textContent = quiz.progress_done + "/" + quiz.progress_total + " (" + percentage + "%)";
-                    
-                    if (quiz.status === "completed" || (quiz.progress_done >= quiz.progress_total && quiz.progress_total > 0)) {
-                        console.log("Exam completed! Status:", quiz.status, "Progress:", quiz.progress_done + "/" + quiz.progress_total);
-                        progressText.textContent = "✅ Completed! Redirecting...";
-                        progressText.style.background = "#10b981";
-                        setTimeout(function() { 
-                            console.log("Redirecting to exam edit page...");
-                            window.location.href = "/user/quizzes/" + quiz.id + "/edit"; 
-                        }, 1500);
-                    }
-                }
-            }
-            
-            function hideProgressBar() {
-                var container = document.getElementById("live-progress-container");
-                if (container) {
-                    container.remove();
-                    console.log("Progress bar hidden");
-                }
-            }
-            
-            // Do not check progress immediately, wait a bit to avoid showing old progress
-            setTimeout(checkProgress, 3000);
-            setInterval(checkProgress, 3000);
-        ');
     }
 }
