@@ -545,8 +545,8 @@ class CreateQuizzes extends CreateRecord
             }
         }
 
-        // If we want to avoid timeouts for large exams, dispatch async job
-        if ($totalQuestions >= 50) {
+        // Always dispatch async job for automatic quiz generation
+        if ($totalQuestions > 0) {
             try {
                 $quiz = Quiz::create($input + [
                     'generation_status' => 'processing',
@@ -554,7 +554,7 @@ class CreateQuizzes extends CreateRecord
                     'generation_progress_done' => 0,
                 ]);
 
-                \Log::info("Created quiz {$quiz->id} for async processing");
+                \Log::info("Created quiz {$quiz->id} for automatic async processing");
 
                 $model = getSetting()->open_ai_model;
                 if (empty($model)) {
@@ -566,10 +566,10 @@ class CreateQuizzes extends CreateRecord
                     model: $model,
                     prompt: $prompt,
                     totalQuestions: $totalQuestions,
-                    batchSize: 10
+                    batchSize: $totalQuestions >= 50 ? 10 : 5
                 );
 
-                \Log::info("Dispatched GenerateQuizJob for quiz {$quiz->id}");
+                \Log::info("Dispatched GenerateQuizJob for quiz {$quiz->id} with {$totalQuestions} questions");
 
                 // Set UI inline progress and return immediately; page will poll quiz status
                 $this->isProcessing = true;
