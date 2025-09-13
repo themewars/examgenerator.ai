@@ -22,11 +22,6 @@ use App\Services\ImageProcessingService;
 class CreateQuizzes extends CreateRecord
 {
     protected static string $resource = QuizzesResource::class;
-    
-    // Simple progress tracking
-    public bool $isGenerating = false;
-    public int $progressDone = 0;
-    public int $progressTotal = 0;
 
     protected static bool $canCreateAnother = false;
 
@@ -34,14 +29,32 @@ class CreateQuizzes extends CreateRecord
 
     protected function getProgressLabel(): string
     {
-        if (!$this->isGenerating || $this->progressTotal <= 0) {
+        // Check database directly for current generation status
+        $userId = auth()->id();
+        if (!$userId) {
             return __('Create Exam');
         }
         
-        $percentage = round(($this->progressDone / $this->progressTotal) * 100);
+        $processingQuiz = Quiz::where('user_id', $userId)
+            ->where('generation_status', 'processing')
+            ->orderBy('created_at', 'desc')
+            ->first();
+            
+        if (!$processingQuiz) {
+            return __('Create Exam');
+        }
+        
+        $progressTotal = $processingQuiz->generation_progress_total ?? 0;
+        $progressDone = $processingQuiz->generation_progress_done ?? 0;
+        
+        if ($progressTotal <= 0) {
+            return __('Create Exam');
+        }
+        
+        $percentage = round(($progressDone / $progressTotal) * 100);
         return __('Creating exam (:done/:total) :percent%', [
-            'done' => $this->progressDone,
-            'total' => $this->progressTotal,
+            'done' => $progressDone,
+            'total' => $progressTotal,
             'percent' => $percentage,
         ]);
     }
@@ -541,10 +554,7 @@ class CreateQuizzes extends CreateRecord
                     $model = 'gpt-4o-mini';
                 }
                 
-                // Set up progress tracking
-                $this->isGenerating = true;
-                $this->progressTotal = $totalQuestions;
-                $this->progressDone = 0;
+                // Progress will be tracked via database and UI refresh
                 
                 \App\Jobs\GenerateQuizJob::dispatch(
                     quizId: $quiz->id,
@@ -559,7 +569,6 @@ class CreateQuizzes extends CreateRecord
                 return $quiz;
             } catch (\Throwable $e) {
                 \Log::error("Failed to create quiz or dispatch job: " . $e->getMessage());
-                $this->isGenerating = false;
                 $this->halt();
             }
         }
@@ -664,7 +673,7 @@ class CreateQuizzes extends CreateRecord
         $create = parent::getFormActions()[0]
             ->label(fn () => $this->getProgressLabel())
             ->icon('heroicon-o-plus')
-            ->disabled(fn () => $this->isGenerating || ((app(\App\Services\PlanValidationService::class)->canCreateExam()['allowed'] ?? true) === false))
+            ->disabled(fn () => ((app(\App\Services\PlanValidationService::class)->canCreateExam()['allowed'] ?? true) === false))
             ->extraAttributes([
                 'wire:target' => 'create',
                 'wire:loading.attr' => 'disabled',
@@ -672,8 +681,16 @@ class CreateQuizzes extends CreateRecord
 
         $actions = [$create];
         
-        // Add progress indicator if generating
-        if ($this->isGenerating) {
+        // Add progress indicator if generating - check database directly
+        $userId = auth()->id();
+        $isCurrentlyGenerating = false;
+        if ($userId) {
+            $isCurrentlyGenerating = Quiz::where('user_id', $userId)
+                ->where('generation_status', 'processing')
+                ->exists();
+        }
+        
+        if ($isCurrentlyGenerating) {
             $actions[] = Action::make('progress')
                 ->label(__('Generating...'))
                 ->disabled()
@@ -702,9 +719,6 @@ class CreateQuizzes extends CreateRecord
     {
         parent::mount();
         
-        // Check for any processing quiz and update progress
-        $this->checkProgress();
-        
         // Add JavaScript to periodically check progress
         $this->js('
             function checkQuizProgress() {
@@ -713,10 +727,8 @@ class CreateQuizzes extends CreateRecord
                 }
             }
             
-            // Check progress every 3 seconds if generating
-            if (' . ($this->isGenerating ? 'true' : 'false') . ') {
-                setInterval(checkQuizProgress, 3000);
-            }
+            // Check progress every 3 seconds
+            setInterval(checkQuizProgress, 3000);
         ');
     }
     
@@ -732,16 +744,8 @@ class CreateQuizzes extends CreateRecord
             ->first();
             
         if ($processingQuiz) {
-            $this->isGenerating = true;
-            $this->progressTotal = $processingQuiz->generation_progress_total ?? 0;
-            $this->progressDone = $processingQuiz->generation_progress_done ?? 0;
-            
             // If completed, redirect to edit page
             if ($processingQuiz->generation_status === 'completed') {
-                $this->isGenerating = false;
-                $this->progressDone = 0;
-                $this->progressTotal = 0;
-                
                 // Redirect to edit page after a short delay
                 $this->js('
                     setTimeout(function() {
@@ -749,10 +753,9 @@ class CreateQuizzes extends CreateRecord
                     }, 1000);
                 ');
             }
-        } else {
-            $this->isGenerating = false;
-            $this->progressDone = 0;
-            $this->progressTotal = 0;
         }
+        
+        // Refresh the page to update the UI
+        $this->dispatch('$refresh');
     }
 }
