@@ -539,124 +539,41 @@ class CreateQuizzes extends CreateRecord
             }
         }
 
-        // If we want to avoid timeouts for large exams, dispatch async job
-        if ($totalQuestions >= 50) {
-            try {
-                $quiz = Quiz::create($input + [
-                    'generation_status' => 'processing',
-                    'generation_progress_total' => $totalQuestions,
-                    'generation_progress_done' => 0,
-                ]);
+        // Always dispatch async job for better performance and progress tracking
+        try {
+            $quiz = Quiz::create($input + [
+                'generation_status' => 'processing',
+                'generation_progress_total' => $totalQuestions,
+                'generation_progress_done' => 0,
+            ]);
 
-                \Log::info("Created quiz {$quiz->id} for async processing");
+            \Log::info("Created quiz {$quiz->id} for async processing");
 
-                $model = getSetting()->open_ai_model;
-                if (empty($model)) {
-                    $model = 'gpt-4o-mini';
-                }
-                
-                // Progress will be tracked via database and UI refresh
-                
-                \App\Jobs\GenerateQuizJob::dispatch(
-                    quizId: $quiz->id,
-                    model: $model,
-                    prompt: $prompt,
-                    totalQuestions: $totalQuestions,
-                    batchSize: 25
-                );
-
-                \Log::info("Dispatched GenerateQuizJob for quiz {$quiz->id}");
-
-                return $quiz;
-            } catch (\Throwable $e) {
-                \Log::error("Failed to create quiz or dispatch job: " . $e->getMessage());
-                $this->halt();
+            $model = getSetting()->open_ai_model;
+            if (empty($model)) {
+                $model = 'gpt-4o-mini';
             }
-        }
-
-        if ($quizText) {
-            $quizData = trim($quizText);
-            if (stripos($quizData, '```json') === 0) {
-                $quizData = preg_replace('/^```json\s*|\s*```$/', '', $quizData);
-                $quizData = trim($quizData);
-            }
-            $quizQuestions = json_decode($quizData, true);
-
-            // Validate that we got valid questions
-            if (!is_array($quizQuestions) || empty($quizQuestions)) {
-                $this->halt();
-            }
-
-            // Normalize to requested count; allow partials and slice extras
-            $requestedQuestions = (int) $data['max_questions'];
-            $generatedQuestions = count($quizQuestions);
-            if ($generatedQuestions > $requestedQuestions) {
-                $quizQuestions = array_slice($quizQuestions, 0, $requestedQuestions);
-                $generatedQuestions = count($quizQuestions);
-            } elseif ($generatedQuestions < $requestedQuestions) {
-                if ($generatedQuestions < 1) {
-                    $this->halt();
-                }
-            }
-
-            $quiz = Quiz::create($input);
-
-            $questionsCreated = 0;
-            $totalQuestions = count($quizQuestions);
             
-            foreach ($quizQuestions as $index => $question) {
-                if (isset($question['question'], $question['answers'])) {
-                    $questionModel = Question::create([
-                        'quiz_id' => $quiz->id,
-                        'title' => $question['question'],
-                    ]);
+            // Progress will be tracked via database and UI refresh
+            
+            \App\Jobs\GenerateQuizJob::dispatch(
+                quizId: $quiz->id,
+                model: $model,
+                prompt: $prompt,
+                totalQuestions: $totalQuestions,
+                batchSize: 25
+            );
 
-                    foreach ($question['answers'] as $answer) {
-                        $isCorrect = false;
-                        $correctKey = $question['correct_answer_key'];
+            \Log::info("Dispatched GenerateQuizJob for quiz {$quiz->id}");
 
-                        if (is_array($correctKey)) {
-                            $isCorrect = in_array($answer['title'], $correctKey);
-                        } else {
-                            $isCorrect = $answer['title'] === $correctKey;
-                        }
-
-                        Answer::create([
-                            'question_id' => $questionModel->id,
-                            'title' => $answer['title'],
-                            'is_correct' => $isCorrect,
-                        ]);
-                    }
-                    $questionsCreated++;
-                }
-            }
-
-            // Only show success if questions were actually created
-            if ($questionsCreated > 0) {
-                // Update monthly usage counters (1 exam, N questions)
-                try {
-                    app(\App\Services\PlanValidationService::class)->updateUsage(1, $questionsCreated);
-                } catch (\Throwable $e) {
-                    // Silently ignore counter update errors to not block creation
-                }
-
-
-                return $quiz;
-            } else {
-                // Delete the quiz if no questions were created
-                $quiz->delete();
-                $this->halt();
-            }
-        } else {
-            // If no quizText was generated, show error
-            Notification::make()
-                ->danger()
-                ->title(__('AI Response Error'))
-                ->body(__('No response received from AI service. Please try again.'))
-                ->send();
+            return $quiz;
+        } catch (\Throwable $e) {
+            \Log::error("Failed to create quiz or dispatch job: " . $e->getMessage());
             $this->halt();
         }
 
+        // This code is now handled by GenerateQuizJob
+        // All quiz creation is now async for better performance and progress tracking
         $this->halt();
     }
 
