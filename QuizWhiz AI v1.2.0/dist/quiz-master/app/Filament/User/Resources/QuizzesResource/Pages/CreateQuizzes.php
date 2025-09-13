@@ -747,7 +747,7 @@ class CreateQuizzes extends CreateRecord
     {
         parent::mount();
         
-        // Progress bar for quiz generation
+        // Inline progress tracking for Create Exam button
         $this->js('
             console.log("Create page loaded");
             
@@ -756,50 +756,45 @@ class CreateQuizzes extends CreateRecord
                 .then(response => response.json())
                 .then(data => {
                     if (data.quiz && data.quiz.status === "processing") {
-                        showProgressBar(data.quiz);
+                        updateCreateButton(data.quiz);
+                    } else if (data.quiz && data.quiz.status === "completed") {
+                        redirectToEdit(data.quiz.id);
                     } else {
-                        hideProgressBar();
+                        resetCreateButton();
                     }
                 })
                 .catch(error => console.error("API Error:", error));
             }
             
-            function showProgressBar(quiz) {
-                var container = document.getElementById("live-progress-container");
-                if (!container) {
-                    var html = "<div id=\\"live-progress-container\\" style=\\"position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:8px 16px;box-shadow:0 2px 8px rgba(0,0,0,0.15);\\"><div style=\\"display:flex;align-items:center;justify-content:space-between;\\"><div style=\\"display:flex;align-items:center;\\"><div style=\\"width:16px;height:16px;border:2px solid white;border-top:transparent;border-radius:50%;animation:spin 1s linear infinite;margin-right:12px;\\"></div><div><div style=\\"font-size:14px;font-weight:500;\\">Generating Exam Questions...</div><div style=\\"font-size:12px;opacity:0.9;\\">Please wait while questions are being generated...</div></div></div><div><span id=\\"progress-text\\" style=\\"font-size:14px;font-weight:600;background:#3b82f6;color:white;padding:4px 8px;border-radius:4px;\\">0/0 (0%)</span></div></div><div style=\\"margin-top:8px;width:100%;background:rgba(255,255,255,0.2);border-radius:9999px;height:4px;\\"><div id=\\"progress-bar\\" style=\\"background:white;height:4px;border-radius:9999px;transition:width 0.3s ease;width:0%;\\"></div></div></div>";
-                    document.body.insertAdjacentHTML("afterbegin", html);
-                }
-                
-                var progressBar = document.getElementById("progress-bar");
-                var progressText = document.getElementById("progress-text");
-                
-                if (progressBar && progressText) {
-                    var percentage = quiz.progress_total > 0 ? Math.round((quiz.progress_done / quiz.progress_total) * 100) : 0;
-                    progressBar.style.width = percentage + "%";
-                    progressText.textContent = quiz.progress_done + "/" + quiz.progress_total + " (" + percentage + "%)";
-                    
-                    if (quiz.status === "completed" || (quiz.progress_done >= quiz.progress_total && quiz.progress_total > 0)) {
-                        progressText.textContent = "✅ Completed! Redirecting...";
-                        progressText.style.background = "#10b981";
-                        setTimeout(() => { 
-                            window.location.href = "/user/quizzes/" + quiz.id + "/edit"; 
-                        }, 1500);
-                    }
+            function updateCreateButton(quiz) {
+                var createButton = document.querySelector("button[type=\\"submit\\"]");
+                if (createButton) {
+                    var progressText = "Creating Exam (" + quiz.progress_done + "/" + quiz.progress_total + ")";
+                    createButton.textContent = progressText;
+                    createButton.disabled = true;
+                    createButton.style.opacity = "0.7";
                 }
             }
             
-            function hideProgressBar() {
-                var container = document.getElementById("live-progress-container");
-                if (container) {
-                    container.remove();
+            function resetCreateButton() {
+                var createButton = document.querySelector("button[type=\\"submit\\"]");
+                if (createButton) {
+                    createButton.textContent = "Create Exam";
+                    createButton.disabled = false;
+                    createButton.style.opacity = "1";
                 }
             }
             
-            // Add CSS for spinner animation
-            var style = document.createElement("style");
-            style.textContent = "@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }";
-            document.head.appendChild(style);
+            function redirectToEdit(quizId) {
+                var createButton = document.querySelector("button[type=\\"submit\\"]");
+                if (createButton) {
+                    createButton.textContent = "✅ Completed! Redirecting...";
+                    createButton.style.background = "#10b981";
+                }
+                setTimeout(() => { 
+                    window.location.href = "/user/quizzes/" + quizId + "/edit"; 
+                }, 1500);
+            }
             
             // Start checking progress
             setTimeout(checkProgress, 3000);
