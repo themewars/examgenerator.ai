@@ -158,6 +158,7 @@ class EditQuizzes extends EditRecord
             $data['custom_questions'] ?? []
         );
         if (!empty($questions)) {
+            $updatedQuestionIds = [];
 
             foreach ($questions as $index => $quizQuestion) {
 
