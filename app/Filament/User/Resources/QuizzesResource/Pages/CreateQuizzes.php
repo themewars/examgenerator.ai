@@ -647,14 +647,26 @@ class CreateQuizzes extends CreateRecord
         
         // Add JavaScript to periodically check progress
         $this->js('
-            function checkQuizProgress() {
+            // Define function in global scope
+            window.checkQuizProgress = function() {
                 if (window.livewire) {
                     window.livewire.find("' . $this->getId() . '").call("checkProgress");
                 }
+            };
+            
+            // Check if there are any processing quizzes
+            let hasProcessingQuiz = false;
+            try {
+                // This will be updated by checkProgress method
+                hasProcessingQuiz = ' . (Quiz::where('user_id', auth()->id())->where('generation_status', 'processing')->exists() ? 'true' : 'false') . ';
+            } catch (e) {
+                hasProcessingQuiz = false;
             }
             
-            // Check progress every 3 seconds
-            setInterval(checkQuizProgress, 3000);
+            // Only start interval if there are processing quizzes
+            if (hasProcessingQuiz) {
+                window.progressInterval = setInterval(window.checkQuizProgress, 3000);
+            }
         ');
     }
     
@@ -672,13 +684,27 @@ class CreateQuizzes extends CreateRecord
         if ($processingQuiz) {
             // If completed, redirect to edit page
             if ($processingQuiz->generation_status === 'completed') {
-                // Redirect to edit page after a short delay
+                // Stop the interval and redirect
                 $this->js('
+                    // Clear any existing intervals
+                    if (window.progressInterval) {
+                        clearInterval(window.progressInterval);
+                    }
+                    
                     setTimeout(function() {
                         window.location.href = "/user/quizzes/' . $processingQuiz->id . '/edit";
                     }, 1000);
                 ');
+                return;
             }
+        } else {
+            // No processing quiz found, stop the interval
+            $this->js('
+                if (window.progressInterval) {
+                    clearInterval(window.progressInterval);
+                }
+            ');
+            return;
         }
         
         // Refresh the page to update the UI
