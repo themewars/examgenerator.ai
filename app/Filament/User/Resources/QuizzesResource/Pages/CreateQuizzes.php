@@ -528,7 +528,7 @@ class CreateQuizzes extends CreateRecord
                     model: $model,
                     prompt: $prompt,
                     totalQuestions: $totalQuestions,
-                    batchSize: 10
+                    batchSize: 25
                 );
 
                 \Log::info("Dispatched GenerateQuizJob for quiz {$quiz->id}");

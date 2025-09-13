@@ -23,7 +23,7 @@ class GenerateQuizJob implements ShouldQueue
     public int $totalQuestions;
     public int $batchSize;
 
-    public function __construct(int $quizId, string $model, string $prompt, int $totalQuestions, int $batchSize = 10)
+    public function __construct(int $quizId, string $model, string $prompt, int $totalQuestions, int $batchSize = 20)
     {
         $this->quizId = $quizId;
         $this->model = $model;
@@ -55,7 +55,7 @@ class GenerateQuizJob implements ShouldQueue
         while ($remaining > 0) {
             $take = min($this->batchSize, $remaining);
             try {
-                $batchPrompt = $this->prompt . "\n\nYou MUST return exactly {$take} questions in this response in the following JSON format:\n\n[\n  {\n    \"question\": \"Your question here\",\n    \"answers\": [\n      {\"title\": \"Option A\"},\n      {\"title\": \"Option B\"},\n      {\"title\": \"Option C\"},\n      {\"title\": \"Option D\"}\n    ],\n    \"correct_answer_key\": \"Option B\"\n  }\n]\n\nReturn ONLY the JSON array, no other text.";
+                $batchPrompt = $this->prompt . "\n\nGenerate exactly {$take} questions. Return ONLY a JSON array in this format:\n\n[\n  {\n    \"question\": \"Question text\",\n    \"answers\": [\n      {\"title\": \"A\"},\n      {\"title\": \"B\"},\n      {\"title\": \"C\"},\n      {\"title\": \"D\"}\n    ],\n    \"correct_answer_key\": \"B\"\n  }\n]\n\nNo explanations, no markdown, just JSON.";
 
                 $apiKey = \App\Models\Setting::first()?->open_api_key ?? '';
                 if (empty($apiKey)) {
@@ -68,13 +68,15 @@ class GenerateQuizJob implements ShouldQueue
                         'Authorization' => 'Bearer ' . $apiKey,
                         'Content-Type' => 'application/json',
                     ])
-                    ->timeout(120)
-                    ->retry(2, 1500)
+                    ->timeout(180)
+                    ->retry(3, 2000)
                     ->post('https://api.openai.com/v1/chat/completions', [
                         'model' => $this->model,
                         'messages' => [
                             ['role' => 'user', 'content' => $batchPrompt],
                         ],
+                        'temperature' => 0.7,
+                        'max_tokens' => 4000,
                     ]);
                 
                 Log::info("OpenAI API response status: " . $response->status());
@@ -112,36 +114,69 @@ class GenerateQuizJob implements ShouldQueue
 
                 Log::info("Parsed {$take} questions from API response");
 
-                // Create questions and answers
+                // Bulk create questions and answers for better performance
                 $createdCount = 0;
+                $questionsToInsert = [];
+                $answersToInsert = [];
+                
                 foreach ($questions as $questionData) {
                     if (!isset($questionData['question'], $questionData['answers'])) {
                         Log::warning("Skipping invalid question structure");
                         continue;
                     }
 
-                    $question = Question::create([
+                    $questionsToInsert[] = [
                         'quiz_id' => $this->quizId,
                         'title' => $questionData['question'],
-                    ]);
-
-                    foreach ($questionData['answers'] as $answerData) {
-                        $isCorrect = false;
-                        $correctKey = $questionData['correct_answer_key'] ?? '';
-
-                        if (is_array($correctKey)) {
-                            $isCorrect = in_array($answerData['title'], $correctKey);
-                        } else {
-                            $isCorrect = $answerData['title'] === $correctKey;
-                        }
-
-                        Answer::create([
-                            'question_id' => $question->id,
-                            'title' => $answerData['title'],
-                            'is_correct' => $isCorrect,
-                        ]);
-                    }
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ];
                     $createdCount++;
+                }
+                
+                // Bulk insert questions
+                if (!empty($questionsToInsert)) {
+                    Question::insert($questionsToInsert);
+                    
+                    // Get the inserted question IDs
+                    $insertedQuestions = Question::where('quiz_id', $this->quizId)
+                        ->orderBy('id', 'desc')
+                        ->limit(count($questionsToInsert))
+                        ->get();
+                    
+                    // Prepare answers for bulk insert
+                    $questionIndex = 0;
+                    foreach ($questions as $questionData) {
+                        if (!isset($questionData['question'], $questionData['answers'])) {
+                            continue;
+                        }
+                        
+                        $questionId = $insertedQuestions[$questionIndex]->id;
+                        $correctKey = $questionData['correct_answer_key'] ?? '';
+                        
+                        foreach ($questionData['answers'] as $answerData) {
+                            $isCorrect = false;
+                            if (is_array($correctKey)) {
+                                $isCorrect = in_array($answerData['title'], $correctKey);
+                            } else {
+                                $isCorrect = $answerData['title'] === $correctKey;
+                            }
+
+                            $answersToInsert[] = [
+                                'question_id' => $questionId,
+                                'title' => $answerData['title'],
+                                'is_correct' => $isCorrect,
+                                'created_at' => now(),
+                                'updated_at' => now(),
+                            ];
+                        }
+                        $questionIndex++;
+                    }
+                    
+                    // Bulk insert answers
+                    if (!empty($answersToInsert)) {
+                        Answer::insert($answersToInsert);
+                    }
                 }
 
                 // Update progress
@@ -155,6 +190,11 @@ class GenerateQuizJob implements ShouldQueue
                 Log::info("Created {$createdCount} questions. Total progress: {$newProgress}/{$this->totalQuestions}");
 
                 $remaining = $this->totalQuestions - $newProgress;
+                
+                // Small delay to avoid rate limiting
+                if ($remaining > 0) {
+                    sleep(1);
+                }
 
             } catch (\Exception $e) {
                 Log::error("Error in GenerateQuizJob: " . $e->getMessage());
