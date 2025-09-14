@@ -109,11 +109,16 @@ class CreateQuizzes extends CreateRecord
             $openaiKey = getSetting('openai_key');
             $geminiKey = getSetting('gemini_key');
             
-            Log::info("AI Keys - OpenAI: " . (!empty($openaiKey) ? 'Present' : 'Missing') . ", Gemini: " . (!empty($geminiKey) ? 'Present' : 'Missing'));
+            // Clean and validate API keys
+            $openaiKey = $this->cleanApiKey($openaiKey);
+            $geminiKey = $this->cleanApiKey($geminiKey);
+            
+            Log::info("AI Keys - OpenAI: " . (!empty($openaiKey) ? 'Present (' . strlen($openaiKey) . ' chars)' : 'Missing') . ", Gemini: " . (!empty($geminiKey) ? 'Present (' . strlen($geminiKey) . ' chars)' : 'Missing'));
             
             if (empty($openaiKey) && empty($geminiKey)) {
-                Log::error("No AI keys configured");
-                throw new \Exception('AI keys not configured. Please contact administrator.');
+                Log::error("No valid AI keys found - creating sample questions");
+                $this->createSampleQuestions($quiz, $maxQuestions);
+                return;
             }
 
             // Build optimized prompt
@@ -246,6 +251,43 @@ class CreateQuizzes extends CreateRecord
 
             // Don't show warning notification - let the outer try-catch handle it
         }
+    }
+
+    private function cleanApiKey($apiKey)
+    {
+        if (empty($apiKey)) {
+            return null;
+        }
+        
+        // Remove any extra whitespace
+        $apiKey = trim($apiKey);
+        
+        // Remove any JSON-like formatting that might be stored incorrectly
+        if (strpos($apiKey, '{"id":') === 0) {
+            // This looks like a JSON object, extract the actual key
+            $decoded = json_decode($apiKey, true);
+            if (isset($decoded['key'])) {
+                $apiKey = $decoded['key'];
+            } elseif (isset($decoded['value'])) {
+                $apiKey = $decoded['value'];
+            }
+        }
+        
+        // Remove quotes if present
+        $apiKey = trim($apiKey, '"\'');
+        
+        // Validate OpenAI key format (should start with sk-)
+        if (strpos($apiKey, 'sk-') === 0) {
+            return $apiKey;
+        }
+        
+        // Validate Gemini key format (should be a long string)
+        if (strlen($apiKey) > 20 && !strpos($apiKey, 'sk-')) {
+            return $apiKey;
+        }
+        
+        Log::warning("Invalid API key format detected: " . substr($apiKey, 0, 20) . "...");
+        return null;
     }
 
     private function buildOptimizedPrompt($description, $maxQuestions)
