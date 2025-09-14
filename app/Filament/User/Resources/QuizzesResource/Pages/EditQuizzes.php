@@ -262,6 +262,13 @@ class EditQuizzes extends EditRecord
                 ->requiresConfirmation()
                 ->modalHeading('Add More Questions with AI')
                 ->modalDescription('This will generate additional questions using AI based on your quiz content. How many questions would you like to add?')
+                ->disabled(function () {
+                    $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
+                    $maxQuestions = $userPlan?->max_questions_per_exam ?? 20;
+                    $currentQuestions = $this->record->questions()->count();
+                    $remainingQuestions = min($maxQuestions, 20) - $currentQuestions;
+                    return $remainingQuestions <= 0;
+                })
                 ->form([
                     \Filament\Forms\Components\TextInput::make('questionCount')
                         ->label('Number of Questions')
@@ -272,7 +279,7 @@ class EditQuizzes extends EditRecord
                             $maxQuestions = $userPlan?->max_questions_per_exam ?? 20;
                             $currentQuestions = $this->record->questions()->count();
                             $remainingQuestions = min($maxQuestions, 20) - $currentQuestions;
-                            return min($remainingQuestions, 10);
+                            return max(min($remainingQuestions, 10), 1);
                         })
                         ->default(3)
                         ->required()
@@ -281,6 +288,11 @@ class EditQuizzes extends EditRecord
                             $maxQuestions = $userPlan?->max_questions_per_exam ?? 20;
                             $currentQuestions = $this->record->questions()->count();
                             $remainingQuestions = min($maxQuestions, 20) - $currentQuestions;
+                            
+                            if ($remainingQuestions <= 0) {
+                                return "You have reached the maximum questions limit for your plan ({$maxQuestions} questions).";
+                            }
+                            
                             return "Maximum 10 questions at a time. Plan allows {$maxQuestions} total questions. {$remainingQuestions} remaining.";
                         })
                 ])
