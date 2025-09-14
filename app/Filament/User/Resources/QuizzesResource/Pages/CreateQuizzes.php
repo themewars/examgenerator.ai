@@ -22,41 +22,16 @@ use App\Services\ImageProcessingService;
 class CreateQuizzes extends CreateRecord
 {
     protected static string $resource = QuizzesResource::class;
-
+    
     protected static bool $canCreateAnother = false;
 
     public static $tab = Quiz::TEXT_TYPE;
 
     protected function getProgressLabel(): string
     {
-        // Check database directly for current generation status
-        $userId = auth()->id();
-        if (!$userId) {
-            return __('Create Exam');
-        }
-        
-        $processingQuiz = Quiz::where('user_id', $userId)
-            ->where('generation_status', 'processing')
-            ->orderBy('created_at', 'desc')
-            ->first();
-            
-        if (!$processingQuiz) {
-            return __('Create Exam');
-        }
-        
-        $progressTotal = $processingQuiz->generation_progress_total ?? 0;
-        $progressDone = $processingQuiz->generation_progress_done ?? 0;
-        
-        if ($progressTotal <= 0) {
-            return __('Create Exam');
-        }
-        
-        $percentage = round(($progressDone / $progressTotal) * 100);
-        return __('Creating exam (:done/:total) :percent%', [
-            'done' => $progressDone,
-            'total' => $progressTotal,
-            'percent' => $percentage,
-        ]);
+        // Only show progress if we're actually in the creation process
+        // This prevents showing progress on page load
+        return __('Create Exam');
     }
 
     public function currentActiveTab()
@@ -576,6 +551,15 @@ class CreateQuizzes extends CreateRecord
 
                 \Log::info("Dispatched GenerateQuizJob for quiz {$quiz->id}");
 
+                // Start progress tracking for this quiz
+                $this->js('
+                    // Start progress interval for this quiz
+                    if (window.progressInterval) {
+                        clearInterval(window.progressInterval);
+                    }
+                    window.progressInterval = setInterval(window.checkQuizProgress, 3000);
+                ');
+
                 return $quiz;
             } catch (\Throwable $e) {
                 \Log::error("Failed to create quiz or dispatch job: " . $e->getMessage());
@@ -628,64 +612,64 @@ class CreateQuizzes extends CreateRecord
                 }
 
                 $quizText = $quizResponse['choices'][0]['message']['content'] ?? null;
-                
-                if ($quizText) {
-                    $quizData = trim($quizText);
-                    if (stripos($quizData, '```json') === 0) {
-                        $quizData = preg_replace('/^```json\s*|\s*```$/', '', $quizData);
-                        $quizData = trim($quizData);
-                    }
-                    
-                    $quizQuestions = json_decode($quizData, true);
 
-                    if (!is_array($quizQuestions) || empty($quizQuestions)) {
+        if ($quizText) {
+            $quizData = trim($quizText);
+            if (stripos($quizData, '```json') === 0) {
+                $quizData = preg_replace('/^```json\s*|\s*```$/', '', $quizData);
+                $quizData = trim($quizData);
+            }
+                    
+            $quizQuestions = json_decode($quizData, true);
+
+            if (!is_array($quizQuestions) || empty($quizQuestions)) {
                         Notification::make()
                             ->danger()
                             ->title(__('messages.quiz.ai_response_error'))
                             ->send();
-                        $this->halt();
-                    }
+                $this->halt();
+            }
 
-                    $quiz = Quiz::create($input);
-                    $questionsCreated = 0;
-                    
-                    foreach ($quizQuestions as $index => $question) {
-                        if (isset($question['question'], $question['answers'])) {
-                            $questionModel = Question::create([
-                                'quiz_id' => $quiz->id,
-                                'title' => $question['question'],
-                            ]);
+            $quiz = Quiz::create($input);
+            $questionsCreated = 0;
+            
+            foreach ($quizQuestions as $index => $question) {
+                if (isset($question['question'], $question['answers'])) {
+                    $questionModel = Question::create([
+                        'quiz_id' => $quiz->id,
+                        'title' => $question['question'],
+                    ]);
 
-                            foreach ($question['answers'] as $answer) {
-                                $isCorrect = false;
-                                $correctKey = $question['correct_answer_key'];
+                    foreach ($question['answers'] as $answer) {
+                        $isCorrect = false;
+                        $correctKey = $question['correct_answer_key'];
 
-                                if (is_array($correctKey)) {
-                                    $isCorrect = in_array($answer['title'], $correctKey);
-                                } else {
-                                    $isCorrect = $answer['title'] === $correctKey;
-                                }
-
-                                Answer::create([
-                                    'question_id' => $questionModel->id,
-                                    'title' => $answer['title'],
-                                    'is_correct' => $isCorrect,
-                                ]);
-                            }
-                            $questionsCreated++;
+                        if (is_array($correctKey)) {
+                            $isCorrect = in_array($answer['title'], $correctKey);
+                        } else {
+                            $isCorrect = $answer['title'] === $correctKey;
                         }
-                    }
 
-                    if ($questionsCreated > 0) {
-                        try {
-                            app(\App\Services\PlanValidationService::class)->updateUsage(1, $questionsCreated);
-                        } catch (\Throwable $e) {
+                        Answer::create([
+                            'question_id' => $questionModel->id,
+                            'title' => $answer['title'],
+                            'is_correct' => $isCorrect,
+                        ]);
+                    }
+                    $questionsCreated++;
+                }
+            }
+
+            if ($questionsCreated > 0) {
+                try {
+                    app(\App\Services\PlanValidationService::class)->updateUsage(1, $questionsCreated);
+                } catch (\Throwable $e) {
                             // Silently ignore counter update errors
-                        }
+                }
 
-                        return $quiz;
-                    } else {
-                        $quiz->delete();
+                return $quiz;
+            } else {
+                $quiz->delete();
                         $this->halt();
                     }
                 } else {
@@ -740,25 +724,8 @@ class CreateQuizzes extends CreateRecord
 
         $actions = [$create];
         
-        // Add progress indicator if generating - check database directly
-        $userId = auth()->id();
-        $isCurrentlyGenerating = false;
-        if ($userId) {
-            $isCurrentlyGenerating = Quiz::where('user_id', $userId)
-                ->where('generation_status', 'processing')
-                ->exists();
-        }
-        
-        if ($isCurrentlyGenerating) {
-            $actions[] = Action::make('progress')
-                ->label(__('Generating...'))
-                ->disabled()
-                ->color('info')
-                ->icon('heroicon-o-clock')
-                ->extraAttributes([
-                    'class' => 'animate-pulse',
-                ]);
-        }
+        // Don't show progress indicator on create page
+        // Progress will be handled by the button label and JavaScript
         
         $actions[] = Action::make('cancel')
             ->label(__('messages.common.cancel'))
@@ -778,28 +745,14 @@ class CreateQuizzes extends CreateRecord
     {
         parent::mount();
         
-        // Add JavaScript to periodically check progress
+        // Just define the function, don't start interval on page load
         $this->js('
-            // Define function in global scope
+            // Define function in global scope for later use
             window.checkQuizProgress = function() {
                 if (window.livewire) {
                     window.livewire.find("' . $this->getId() . '").call("checkProgress");
                 }
             };
-            
-            // Check if there are any processing quizzes
-            let hasProcessingQuiz = false;
-            try {
-                // This will be updated by checkProgress method
-                hasProcessingQuiz = ' . (Quiz::where('user_id', auth()->id())->where('generation_status', 'processing')->exists() ? 'true' : 'false') . ';
-            } catch (e) {
-                hasProcessingQuiz = false;
-            }
-            
-            // Only start interval if there are processing quizzes
-            if (hasProcessingQuiz) {
-                window.progressInterval = setInterval(window.checkQuizProgress, 3000);
-            }
         ');
     }
     
@@ -815,6 +768,21 @@ class CreateQuizzes extends CreateRecord
             ->first();
             
         if ($processingQuiz) {
+            $progressTotal = $processingQuiz->generation_progress_total ?? 0;
+            $progressDone = $processingQuiz->generation_progress_done ?? 0;
+            
+            // Update button label with progress
+            if ($progressTotal > 0) {
+                $percentage = round(($progressDone / $progressTotal) * 100);
+                $this->js('
+                    // Update button label
+                    const createButton = document.querySelector("[wire\\:target=\'create\']");
+                    if (createButton) {
+                        createButton.textContent = "Creating exam (' . $progressDone . '/' . $progressTotal . ') ' . $percentage . '%";
+                    }
+                ');
+            }
+            
             // If completed, redirect to edit page
             if ($processingQuiz->generation_status === 'completed') {
                 // Stop the interval and redirect
@@ -824,7 +792,7 @@ class CreateQuizzes extends CreateRecord
                         clearInterval(window.progressInterval);
                     }
                     
-                    setTimeout(function() {
+                        setTimeout(function() { 
                         window.location.href = "/user/quizzes/' . $processingQuiz->id . '/edit";
                     }, 1000);
                 ');
@@ -839,8 +807,5 @@ class CreateQuizzes extends CreateRecord
             ');
             return;
         }
-        
-        // Refresh the page to update the UI
-        $this->dispatch('$refresh');
     }
 }
