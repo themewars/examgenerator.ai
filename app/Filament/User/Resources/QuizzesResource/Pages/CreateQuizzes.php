@@ -48,7 +48,7 @@ class CreateQuizzes extends CreateRecord
         return $tabType[$tab] ?? Quiz::TEXT_TYPE;
     }
 
-    protected function mutateFormDataBeforeCreate(array $data): array
+    protected function handleRecordCreation(array $data): Model
     {
         try {
             $userId = Auth::id();
@@ -75,14 +75,198 @@ class CreateQuizzes extends CreateRecord
             $data['type'] = $activeTab;
             $data['status'] = 1;
             $data['unique_code'] = generateUniqueCode();
-            $data['generation_status'] = 'completed';
+            $data['generation_status'] = 'processing';
             $data['generation_progress_total'] = $data['max_questions'] ?? 10;
-            $data['generation_progress_done'] = $data['max_questions'] ?? 10;
+            $data['generation_progress_done'] = 0;
 
-            return $data;
+            // Create quiz record
+            $quiz = Quiz::create($data);
+
+            // Generate questions using AI
+            $this->generateQuestionsWithAI($quiz, $description, $data['max_questions'] ?? 10);
+
+            return $quiz;
+
         } catch (\Exception $e) {
-            // If any error occurs, return original data
-            return $data;
+            Log::error("Quiz creation error: " . $e->getMessage());
+            
+            Notification::make()
+                ->danger()
+                ->title(__('Quiz Creation Failed'))
+                ->body(__('Unable to create quiz. Please try again.'))
+                ->send();
+                
+            throw $e;
+        }
+    }
+
+    private function generateQuestionsWithAI($quiz, $description, $maxQuestions)
+    {
+        try {
+            // Get AI settings
+            $openaiKey = getSetting('openai_key');
+            $geminiKey = getSetting('gemini_key');
+            
+            if (empty($openaiKey) && empty($geminiKey)) {
+                throw new \Exception('No AI keys configured');
+            }
+
+            // Build prompt
+            $prompt = $this->buildPrompt($description, $maxQuestions);
+            
+            // Generate with OpenAI or Gemini
+            $questions = null;
+            if (!empty($openaiKey)) {
+                $questions = $this->generateWithOpenAI($prompt, $openaiKey);
+            } elseif (!empty($geminiKey)) {
+                $questions = $this->generateWithGemini($prompt, $geminiKey);
+            }
+
+            if (empty($questions)) {
+                throw new \Exception('Failed to generate questions');
+            }
+
+            // Parse and create questions
+            $this->createQuestionsAndAnswers($quiz, $questions);
+
+            // Update quiz status
+            $quiz->update([
+                'generation_status' => 'completed',
+                'generation_progress_done' => $maxQuestions
+            ]);
+
+            Notification::make()
+                ->success()
+                ->title(__('Quiz Created Successfully'))
+                ->body(__('Your quiz has been created with ' . $maxQuestions . ' questions.'))
+                ->send();
+
+        } catch (\Exception $e) {
+            Log::error("AI generation error: " . $e->getMessage());
+            
+            $quiz->update([
+                'generation_status' => 'failed',
+                'generation_error' => $e->getMessage()
+            ]);
+
+            Notification::make()
+                ->warning()
+                ->title(__('Quiz Created with Issues'))
+                ->body(__('Quiz created but questions generation failed. Please try again.'))
+                ->send();
+        }
+    }
+
+    private function buildPrompt($description, $maxQuestions)
+    {
+        return "Generate exactly {$maxQuestions} multiple choice questions based on this content: {$description}. 
+
+CRITICAL REQUIREMENTS:
+- Generate EXACTLY {$maxQuestions} questions
+- Each question must have 4 answer options
+- Mark the correct answer clearly
+- Questions should be relevant to the content
+- Format: Question: [question text] Options: A) [option1] B) [option2] C) [option3] D) [option4] Correct: [correct option]";
+    }
+
+    private function generateWithOpenAI($prompt, $apiKey)
+    {
+        $client = new \GuzzleHttp\Client();
+        
+        $response = $client->post('https://api.openai.com/v1/chat/completions', [
+            'headers' => [
+                'Authorization' => 'Bearer ' . $apiKey,
+                'Content-Type' => 'application/json',
+            ],
+            'json' => [
+                'model' => 'gpt-3.5-turbo',
+                'messages' => [
+                    ['role' => 'user', 'content' => $prompt]
+                ],
+                'max_tokens' => 2000,
+                'temperature' => 0.7,
+            ],
+            'timeout' => 90
+        ]);
+
+        $data = json_decode($response->getBody(), true);
+        return $data['choices'][0]['message']['content'] ?? null;
+    }
+
+    private function generateWithGemini($prompt, $apiKey)
+    {
+        $client = new \GuzzleHttp\Client();
+        
+        $response = $client->post("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={$apiKey}", [
+            'headers' => [
+                'Content-Type' => 'application/json',
+            ],
+            'json' => [
+                'contents' => [
+                    ['parts' => [['text' => $prompt]]]
+                ],
+                'generationConfig' => [
+                    'maxOutputTokens' => 2000,
+                    'temperature' => 0.7,
+                ]
+            ],
+            'timeout' => 90
+        ]);
+
+        $data = json_decode($response->getBody(), true);
+        return $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
+    }
+
+    private function createQuestionsAndAnswers($quiz, $aiResponse)
+    {
+        $lines = explode("\n", $aiResponse);
+        $currentQuestion = null;
+        $currentOptions = [];
+        $correctAnswer = null;
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+            
+            if (strpos($line, 'Question:') === 0) {
+                // Save previous question if exists
+                if ($currentQuestion) {
+                    $this->saveQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
+                }
+                
+                // Start new question
+                $currentQuestion = substr($line, 9);
+                $currentOptions = [];
+                $correctAnswer = null;
+            } elseif (strpos($line, 'A)') === 0 || strpos($line, 'B)') === 0 || strpos($line, 'C)') === 0 || strpos($line, 'D)') === 0) {
+                $currentOptions[] = $line;
+            } elseif (strpos($line, 'Correct:') === 0) {
+                $correctAnswer = substr($line, 8);
+            }
+        }
+
+        // Save last question
+        if ($currentQuestion) {
+            $this->saveQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
+        }
+    }
+
+    private function saveQuestion($quiz, $questionText, $options, $correctAnswer)
+    {
+        $question = $quiz->questions()->create([
+            'title' => $questionText,
+            'type' => 0, // Multiple choice
+        ]);
+
+        foreach ($options as $index => $option) {
+            $isCorrect = false;
+            if ($correctAnswer && strpos($option, $correctAnswer) !== false) {
+                $isCorrect = true;
+            }
+
+            $question->answers()->create([
+                'title' => $option,
+                'is_correct' => $isCorrect,
+            ]);
         }
     }
 
