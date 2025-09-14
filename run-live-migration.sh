@@ -17,7 +17,7 @@ echo -e "${BLUE}=====================================${NC}"
 echo ""
 
 # Configuration
-PROJECT_PATH="/var/www/html/quizwhiz-ai"
+PROJECT_PATH="/var/www/html/public_html"
 BACKUP_DIR="/var/backups/quizwhiz"
 
 echo -e "${YELLOW}⚠️  IMPORTANT: This will modify your live database!${NC}"
