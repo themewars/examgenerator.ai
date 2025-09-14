@@ -27,6 +27,13 @@ class ManageSubscription extends Page implements HasTable
         return Subscription::class;
     }
 
+    protected function getHeaderWidgets(): array
+    {
+        return [
+            \App\Filament\User\Pages\Widgets\CurrentPlanWidget::class,
+        ];
+    }
+
     public function table(Table $table): Table
     {
         return $table
