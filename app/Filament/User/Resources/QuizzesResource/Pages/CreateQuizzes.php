@@ -524,52 +524,8 @@ class CreateQuizzes extends CreateRecord
             $this->halt();
         }
 
-        // Use async processing for larger quizzes (20+ questions) or synchronous for smaller ones
-        if ($totalQuestions >= 20) {
-            // Async processing for larger quizzes
-            try {
-                $quiz = Quiz::create($input + [
-                    'generation_status' => 'processing',
-                    'generation_progress_total' => $totalQuestions,
-                    'generation_progress_done' => 0,
-                ]);
-
-                \Log::info("Created quiz {$quiz->id} for async processing with prompt length: " . strlen($prompt));
-
-                $model = getSetting()->open_ai_model;
-                if (empty($model)) {
-                    $model = 'gpt-4o-mini';
-                }
-                
-                \App\Jobs\GenerateQuizJob::dispatch(
-                    quizId: $quiz->id,
-                    model: $model,
-                    prompt: $prompt,
-                    totalQuestions: $totalQuestions,
-                    batchSize: 25
-                );
-
-                \Log::info("Dispatched GenerateQuizJob for quiz {$quiz->id}");
-
-                // Start progress tracking for this quiz
-                $this->js('
-                    if (window.progressInterval) clearInterval(window.progressInterval);
-                    window.progressInterval = setInterval(window.checkQuizProgress, 3000);
-                ');
-
-                return $quiz;
-            } catch (\Throwable $e) {
-                \Log::error("Failed to create quiz or dispatch job: " . $e->getMessage());
-                Notification::make()
-                    ->danger()
-                    ->title(__('Quiz Creation Failed'))
-                    ->body(__('Unable to create quiz. Please try again.'))
-                    ->send();
-                $this->halt();
-            }
-        } else {
-            // Synchronous processing for smaller quizzes
-            try {
+        // Always use synchronous processing for now - keep it simple
+        try {
                 $model = getSetting()->open_ai_model;
                 if (empty($model)) {
                     $model = 'gpt-4o-mini';
@@ -677,15 +633,14 @@ class CreateQuizzes extends CreateRecord
                         ->send();
                     $this->halt();
                 }
-            } catch (\Throwable $e) {
-                \Log::error("Synchronous quiz creation failed: " . $e->getMessage());
-                Notification::make()
-                    ->danger()
-                    ->title(__('Quiz Creation Failed'))
-                    ->body(__('Unable to create quiz. Please try again.'))
-                    ->send();
-                $this->halt();
-            }
+        } catch (\Throwable $e) {
+            \Log::error("Quiz creation failed: " . $e->getMessage());
+            Notification::make()
+                ->danger()
+                ->title(__('Quiz Creation Failed'))
+                ->body(__('Unable to create quiz. Please try again.'))
+                ->send();
+            $this->halt();
         }
 
         $this->halt();
@@ -741,61 +696,12 @@ class CreateQuizzes extends CreateRecord
     public function mount(): void
     {
         parent::mount();
-        
-        // Just define the function, don't start interval on page load
-        $this->js('
-            // Define function in global scope for later use
-            window.checkQuizProgress = function() {
-                if (window.livewire) {
-                    window.livewire.find("' . $this->getId() . '").call("checkProgress");
-                }
-            };
-        ');
+        // No JavaScript needed for now - focus on exam creation first
     }
     
     public function checkProgress(): void
     {
-        $userId = auth()->id();
-        if (!$userId) return;
-        
-        // Find any quiz that's currently being processed by this user
-        $processingQuiz = Quiz::where('user_id', $userId)
-            ->where('generation_status', 'processing')
-            ->orderBy('created_at', 'desc')
-            ->first();
-            
-        if ($processingQuiz) {
-            $progressTotal = $processingQuiz->generation_progress_total ?? 0;
-            $progressDone = $processingQuiz->generation_progress_done ?? 0;
-            
-            // Update button label with progress
-            if ($progressTotal > 0) {
-                $percentage = round(($progressDone / $progressTotal) * 100);
-                $this->js('
-                    const createButton = document.querySelector("[wire\\:target=\'create\']");
-                    if (createButton) {
-                        createButton.textContent = "Creating exam (' . $progressDone . '/' . $progressTotal . ') ' . $percentage . '%";
-                    }
-                ');
-            }
-            
-            // If completed, redirect to edit page
-            if ($processingQuiz->generation_status === 'completed') {
-                // Stop the interval and redirect
-                $this->js('
-                    if (window.progressInterval) clearInterval(window.progressInterval);
-                    setTimeout(function() { 
-                        window.location.href = "/user/quizzes/' . $processingQuiz->id . '/edit";
-                    }, 1000);
-                ');
-                return;
-            }
-        } else {
-            // No processing quiz found, stop the interval
-            $this->js('
-                if (window.progressInterval) clearInterval(window.progressInterval);
-            ');
-            return;
-        }
+        // Simple progress check - just refresh the page
+        $this->dispatch('$refresh');
     }
 }
