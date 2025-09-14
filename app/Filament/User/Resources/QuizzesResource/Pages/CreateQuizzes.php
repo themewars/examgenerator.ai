@@ -82,8 +82,8 @@ class CreateQuizzes extends CreateRecord
             // Create quiz record
             $quiz = Quiz::create($data);
 
-            // Always create sample questions for now
-            $this->createSampleQuestions($quiz, $data['max_questions'] ?? 10);
+            // Generate real questions using AI
+            $this->generateRealQuestions($quiz, $description, $data['max_questions'] ?? 10);
 
             return $quiz;
 
@@ -97,6 +97,89 @@ class CreateQuizzes extends CreateRecord
                 ->send();
                 
             throw $e;
+        }
+    }
+
+    private function generateRealQuestions($quiz, $description, $maxQuestions)
+    {
+        try {
+            Log::info("Starting real question generation for quiz {$quiz->id}");
+            
+            // Get AI settings
+            $openaiKey = getSetting('openai_key');
+            $geminiKey = getSetting('gemini_key');
+            
+            Log::info("AI Keys - OpenAI: " . (!empty($openaiKey) ? 'Present' : 'Missing') . ", Gemini: " . (!empty($geminiKey) ? 'Present' : 'Missing'));
+            
+            if (empty($openaiKey) && empty($geminiKey)) {
+                Log::error("No AI keys configured");
+                throw new \Exception('AI keys not configured. Please contact administrator.');
+            }
+
+            // Build optimized prompt
+            $prompt = $this->buildOptimizedPrompt($description, $maxQuestions);
+            Log::info("Generated prompt length: " . strlen($prompt));
+            
+            // Try OpenAI first, then Gemini
+            $questions = null;
+            if (!empty($openaiKey)) {
+                Log::info("Attempting OpenAI generation");
+                $questions = $this->generateWithOpenAI($prompt, $openaiKey);
+                if (!empty($questions)) {
+                    Log::info("OpenAI generation successful");
+                }
+            }
+            
+            if (empty($questions) && !empty($geminiKey)) {
+                Log::info("Attempting Gemini generation");
+                $questions = $this->generateWithGemini($prompt, $geminiKey);
+                if (!empty($questions)) {
+                    Log::info("Gemini generation successful");
+                }
+            }
+
+            if (empty($questions)) {
+                Log::error("Both AI services failed");
+                throw new \Exception('AI generation failed. Please try again.');
+            }
+
+            Log::info("AI response length: " . strlen($questions));
+
+            // Parse and create questions
+            $questionCount = $this->parseAndCreateQuestions($quiz, $questions);
+            
+            if ($questionCount == 0) {
+                Log::error("No questions parsed from AI response");
+                throw new \Exception('Failed to parse questions from AI response.');
+            }
+            
+            Log::info("Successfully created {$questionCount} questions for quiz {$quiz->id}");
+
+            // Update quiz status
+            $quiz->update([
+                'generation_status' => 'completed',
+                'generation_progress_done' => $questionCount
+            ]);
+
+            Notification::make()
+                ->success()
+                ->title(__('Quiz Created Successfully'))
+                ->body(__('Your quiz has been created with ' . $questionCount . ' questions.'))
+                ->send();
+
+        } catch (\Exception $e) {
+            Log::error("Real question generation failed: " . $e->getMessage());
+            
+            $quiz->update([
+                'generation_status' => 'failed',
+                'generation_error' => $e->getMessage()
+            ]);
+
+            Notification::make()
+                ->warning()
+                ->title(__('Quiz Created with Issues'))
+                ->body(__('Quiz created but question generation failed: ' . $e->getMessage()))
+                ->send();
         }
     }
 
@@ -165,6 +248,34 @@ class CreateQuizzes extends CreateRecord
         }
     }
 
+    private function buildOptimizedPrompt($description, $maxQuestions)
+    {
+        return "Create exactly {$maxQuestions} multiple choice questions based on: {$description}
+
+REQUIREMENTS:
+- Generate EXACTLY {$maxQuestions} questions
+- Each question must have exactly 4 options (A, B, C, D)
+- Mark the correct answer clearly
+- Questions should be relevant and educational
+- Use this exact format:
+
+Question 1: [Your question here?]
+A) [Option 1]
+B) [Option 2] 
+C) [Option 3]
+D) [Option 4]
+Correct Answer: [A/B/C/D]
+
+Question 2: [Your question here?]
+A) [Option 1]
+B) [Option 2]
+C) [Option 3] 
+D) [Option 4]
+Correct Answer: [A/B/C/D]
+
+Continue this pattern for all {$maxQuestions} questions.";
+    }
+
     private function buildPrompt($description, $maxQuestions)
     {
         return "Generate exactly {$maxQuestions} multiple choice questions based on this content: {$description}. 
@@ -223,6 +334,59 @@ CRITICAL REQUIREMENTS:
 
         $data = json_decode($response->getBody(), true);
         return $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
+    }
+
+    private function parseAndCreateQuestions($quiz, $aiResponse)
+    {
+        Log::info("Parsing AI response for quiz {$quiz->id}");
+        
+        $lines = explode("\n", $aiResponse);
+        $currentQuestion = null;
+        $currentOptions = [];
+        $correctAnswer = null;
+        $questionCount = 0;
+
+        Log::info("AI response has " . count($lines) . " lines");
+
+        foreach ($lines as $lineNum => $line) {
+            $line = trim($line);
+            
+            // Skip empty lines
+            if (empty($line)) continue;
+            
+            // Check for question pattern
+            if (preg_match('/^Question \d+:/i', $line)) {
+                // Save previous question if exists
+                if ($currentQuestion && count($currentOptions) >= 4) {
+                    $this->saveQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
+                    $questionCount++;
+                    Log::info("Saved question {$questionCount}: " . substr($currentQuestion, 0, 50) . "...");
+                }
+                
+                // Start new question
+                $currentQuestion = preg_replace('/^Question \d+:\s*/i', '', $line);
+                $currentOptions = [];
+                $correctAnswer = null;
+            } 
+            // Check for option pattern
+            elseif (preg_match('/^[A-D]\)\s*(.+)$/i', $line, $matches)) {
+                $currentOptions[] = $matches[1];
+            } 
+            // Check for correct answer pattern
+            elseif (preg_match('/^Correct Answer:\s*([A-D])/i', $line, $matches)) {
+                $correctAnswer = $matches[1];
+            }
+        }
+
+        // Save last question
+        if ($currentQuestion && count($currentOptions) >= 4) {
+            $this->saveQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
+            $questionCount++;
+            Log::info("Saved final question {$questionCount}: " . substr($currentQuestion, 0, 50) . "...");
+        }
+
+        Log::info("Successfully parsed {$questionCount} questions from AI response");
+        return $questionCount;
     }
 
     private function createQuestionsAndAnswers($quiz, $aiResponse)
@@ -335,9 +499,13 @@ CRITICAL REQUIREMENTS:
             'type' => 0, // Multiple choice
         ]);
 
+        $optionLetters = ['A', 'B', 'C', 'D'];
+        
         foreach ($options as $index => $option) {
             $isCorrect = false;
-            if ($correctAnswer && strpos($option, $correctAnswer) !== false) {
+            
+            // Check if this option matches the correct answer
+            if ($correctAnswer && isset($optionLetters[$index]) && $optionLetters[$index] === strtoupper($correctAnswer)) {
                 $isCorrect = true;
             }
 
@@ -345,7 +513,11 @@ CRITICAL REQUIREMENTS:
                 'title' => $option,
                 'is_correct' => $isCorrect,
             ]);
+            
+            Log::info("Created answer option " . ($index + 1) . ": " . substr($option, 0, 30) . "... (Correct: " . ($isCorrect ? 'Yes' : 'No') . ")");
         }
+        
+        Log::info("Question saved: " . substr($questionText, 0, 50) . "... with " . count($options) . " options");
     }
 
 
