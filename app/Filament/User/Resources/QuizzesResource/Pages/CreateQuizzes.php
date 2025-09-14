@@ -29,8 +29,6 @@ class CreateQuizzes extends CreateRecord
 
     protected function getProgressLabel(): string
     {
-        // Only show progress if we're actually in the creation process
-        // This prevents showing progress on page load
         return __('Create Exam');
     }
 
@@ -52,9 +50,7 @@ class CreateQuizzes extends CreateRecord
 
     protected function handleRecordCreation(array $data): Model
     {
-
         $userId = Auth::id();
-        // Default active tab from user presets if available
         $presetTab = getUserSettings('preset_default_tab');
         $activeTab = $presetTab !== null ? (int) $presetTab : getTabType();
 
@@ -62,13 +58,13 @@ class CreateQuizzes extends CreateRecord
             Quiz::TEXT_TYPE => $data['quiz_description_text'] ?? null,
             Quiz::SUBJECT_TYPE => $data['quiz_description_sub'] ?? null,
             Quiz::URL_TYPE => $data['quiz_description_url'] ?? null,
-            Quiz::UPLOAD_TYPE => null, // Will be processed from file upload
-            Quiz::IMAGE_TYPE => null, // Will be processed from image upload
+            Quiz::UPLOAD_TYPE => null,
+            Quiz::IMAGE_TYPE => null,
         ];
 
         $description = $descriptionFields[$activeTab] ?? null;
 
-        // Apply user presets as defaults if provided
+        // Apply user presets
         $presetLanguage = getUserSettings('preset_language');
         $presetDifficulty = getUserSettings('preset_difficulty');
         $presetQuestionType = getUserSettings('preset_question_type');
@@ -90,11 +86,13 @@ class CreateQuizzes extends CreateRecord
             'time' => $data['time'] ?? 0,
             'time_type' => $data['time_type'] ?? null,
             'quiz_expiry_date' => $data['quiz_expiry_date'] ?? null,
+            'generation_status' => 'processing',
+            'generation_progress_total' => 0,
+            'generation_progress_created' => 0,
         ];
 
+        // Handle URL content extraction
         if ($activeTab == Quiz::URL_TYPE && $data['quiz_description_url'] != null) {
-            // Inline state only; no popups
-
             $url = $data['quiz_description_url'];
 
             $ch = curl_init($url);
@@ -122,22 +120,20 @@ class CreateQuizzes extends CreateRecord
             if ($maxTokens && $maxTokens > 0) {
                 $estimated = \App\Services\TokenEstimator::estimateTokens($description ?? '');
                 if ($estimated > $maxTokens) {
-                    // Truncate to allowed budget
-                    $charsAllowed = $maxTokens * 4; // inverse of 4 chars ≈ 1 token
+                    $charsAllowed = $maxTokens * 4;
                     $description = mb_substr($description, 0, $charsAllowed, 'UTF-8');
-                    \Filament\Notifications\Notification::make()
+                    Notification::make()
                         ->warning()
                         ->title(__('Content truncated to fit your plan limit'))
                         ->body(__('Your website content exceeded the allowed size for this plan. We used the first :tokens tokens.', ['tokens' => $maxTokens]))
                         ->send();
                 }
             }
-            $input['type'] = Quiz::URL_TYPE; // Set type to URL
+            $input['type'] = Quiz::URL_TYPE;
         }
 
+        // Handle file uploads
         if (isset($this->data['file_upload']) && is_array($this->data['file_upload'])) {
-            // Process file silently; inline counter will handle UX
-
             foreach ($this->data['file_upload'] as $file) {
                 if ($file instanceof \Illuminate\Http\UploadedFile) {
                     $filePath = $file->store('temp-file', 'public');
@@ -146,41 +142,37 @@ class CreateQuizzes extends CreateRecord
 
                     if ($extension === 'pdf') {
                         $description = pdfToText($fileUrl);
-                        // Best-effort page count: split on form feed or fallback by heuristics
                         $pages = substr_count($description, "\f");
                         $pages = $pages > 0 ? $pages : null;
                         $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
                         if ($userPlan && $userPlan->max_pdf_pages_allowed && $userPlan->max_pdf_pages_allowed > 0 && $pages && $pages > $userPlan->max_pdf_pages_allowed) {
-                            \Filament\Notifications\Notification::make()->danger()->title(__('This PDF is too large for your current plan. Please upgrade to a higher plan.'))->send();
+                            Notification::make()->danger()->title(__('This PDF is too large for your current plan. Please upgrade to a higher plan.'))->send();
                             $this->halt();
                         }
-                        // Token budget guard as well
                         if ($userPlan && $userPlan->max_website_tokens_allowed) {
                             $estimated = \App\Services\TokenEstimator::estimateTokens($description ?? '');
-                            $maxTokens = $userPlan->max_website_tokens_allowed; // reuse same cap for pdf text if set
+                            $maxTokens = $userPlan->max_website_tokens_allowed;
                             if ($maxTokens > 0 && $estimated > $maxTokens) {
-                                \Filament\Notifications\Notification::make()->danger()->title(__('Your file exceeds the allowed limit for this plan. Please upgrade to continue.'))->send();
+                                Notification::make()->danger()->title(__('Your file exceeds the allowed limit for this plan. Please upgrade to continue.'))->send();
                                 $this->halt();
                             }
                         }
-                        $input['type'] = Quiz::UPLOAD_TYPE; // Set type to upload
+                        $input['type'] = Quiz::UPLOAD_TYPE;
                     } elseif ($extension === 'docx') {
                         $description = docxToText($fileUrl);
-                        $input['type'] = Quiz::UPLOAD_TYPE; // Set type to upload
+                        $input['type'] = Quiz::UPLOAD_TYPE;
                     }
                 }
             }
         }
 
-        // Process image uploads for OCR (silent)
+        // Handle image uploads
         if (isset($this->data['image_upload']) && is_array($this->data['image_upload'])) {
-            // No popups; keep inline indicator
-
             $imageProcessingService = new ImageProcessingService();
             $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
             $maxImages = $userPlan?->max_images_allowed;
             if ($maxImages && $maxImages > 0 && count($this->data['image_upload']) > $maxImages) {
-                \Filament\Notifications\Notification::make()->danger()->title(__('Your file exceeds the allowed limit for this plan. Please upgrade to continue.'))->send();
+                Notification::make()->danger()->title(__('Your file exceeds the allowed limit for this plan. Please upgrade to continue.'))->send();
                 $this->halt();
             }
             foreach ($this->data['image_upload'] as $file) {
@@ -189,17 +181,16 @@ class CreateQuizzes extends CreateRecord
                         $extractedText = $imageProcessingService->processUploadedImage($file);
                         if ($extractedText) {
                             $description = $extractedText;
-                            $input['type'] = Quiz::IMAGE_TYPE; // Set type to image
-                            // Guard token budget for OCR result too
+                            $input['type'] = Quiz::IMAGE_TYPE;
                             if ($userPlan && $userPlan->max_website_tokens_allowed) {
                                 $estimated = \App\Services\TokenEstimator::estimateTokens($description ?? '');
                                 $maxTokens = $userPlan->max_website_tokens_allowed;
                                 if ($maxTokens > 0 && $estimated > $maxTokens) {
-                                    \Filament\Notifications\Notification::make()->danger()->title(__('Your file exceeds the allowed limit for this plan. Please upgrade to continue.'))->send();
+                                    Notification::make()->danger()->title(__('Your file exceeds the allowed limit for this plan. Please upgrade to continue.'))->send();
                                     $this->halt();
                                 }
                             }
-                            break; // Use first successfully processed image
+                            break;
                         }
                     }
                 }
@@ -210,458 +201,33 @@ class CreateQuizzes extends CreateRecord
             $description = substr($description, 0, 10000).'...';
         }
 
-        $quizData = [
-            'Title' => $data['title'],
-            'Description' => $description,
-            'No of Questions' => $data['max_questions'],
-            'Difficulty' => Quiz::DIFF_LEVEL[$data['diff_level']],
-            'question_type' => Quiz::QUIZ_TYPE[$data['quiz_type']],
-            'language' => getAllLanguages()[$data['language']] ?? 'English',
-        ];
-
-        // Generate dynamic prompt based on selected question type
-        $questionType = $quizData['question_type'];
-        $formatInstructions = '';
-        $guidelines = '';
-
-        switch ($questionType) {
-            case 'Multiple Choices':
-                $formatInstructions = <<<FORMAT
-    **Format for Multiple Choice Questions:**
-    - Structure your JSON with exactly four answer options
-    - Mark exactly one option as `is_correct: true`
-    - Use the following format:
-
-    [
-        {
-            "question": "Your question text here",
-            "answers": [
-                {
-                    "title": "Answer Option 1",
-                    "is_correct": false
-                },
-                {
-                    "title": "Answer Option 2",
-                    "is_correct": true
-                },
-                {
-                    "title": "Answer Option 3",
-                    "is_correct": false
-                },
-                {
-                    "title": "Answer Option 4",
-                    "is_correct": false
-                }
-            ],
-            "correct_answer_key": "Answer Option 2"
-        }
-    ]
-    FORMAT;
-                $guidelines = '- You must generate exactly **' . $data['max_questions'] . '** Multiple Choice questions with exactly four answer options each, with one option marked as `is_correct: true`.';
-                break;
-
-            case 'Single Choice':
-                $formatInstructions = <<<FORMAT
-    **Format for Single Choice Questions:**
-    - Structure your JSON with exactly two answer options
-    - Mark exactly one option as `is_correct: true`
-    - Use the following format:
-
-    [
-        {
-            "question": "Your question text here",
-            "answers": [
-                {
-                    "title": "Answer Option 1",
-                    "is_correct": false
-                },
-                {
-                    "title": "Answer Option 2",
-                    "is_correct": true
-                }
-            ],
-            "correct_answer_key": "Answer Option 2"
-        }
-    ]
-    FORMAT;
-                $guidelines = '- You must generate exactly **' . $data['max_questions'] . '** Single Choice questions with exactly two answer options each, with one option marked as `is_correct: true`.';
-                break;
-
-            case 'Short Answer':
-                $formatInstructions = <<<FORMAT
-    **Format for Short Answer Questions:**
-    - Structure your JSON with one correct answer
-    - Use the following format:
-
-    [
-        {
-            "question": "Your question text here",
-            "answers": [
-                {
-                    "title": "Expected short answer",
-                    "is_correct": true
-                }
-            ],
-            "correct_answer_key": "Expected short answer"
-        }
-    ]
-    FORMAT;
-                $guidelines = '- You must generate exactly **' . $data['max_questions'] . '** Short Answer questions with one correct answer each.';
-                break;
-
-            case 'Long Answer':
-                $formatInstructions = <<<FORMAT
-    **Format for Long Answer Questions:**
-    - Structure your JSON with one detailed correct answer
-    - Use the following format:
-
-    [
-        {
-            "question": "Your question text here",
-            "answers": [
-                {
-                    "title": "Expected detailed answer",
-                    "is_correct": true
-                }
-            ],
-            "correct_answer_key": "Expected detailed answer"
-        }
-    ]
-    FORMAT;
-                $guidelines = '- You must generate exactly **' . $data['max_questions'] . '** Long Answer questions with one detailed correct answer each.';
-                break;
-
-            case 'True/False':
-                $formatInstructions = <<<FORMAT
-    **Format for True/False Questions:**
-    - Structure your JSON with exactly two options: "True" and "False"
-    - Mark one option as `is_correct: true`
-    - Use the following format:
-
-    [
-        {
-            "question": "Your question text here",
-            "answers": [
-                {
-                    "title": "True",
-                    "is_correct": true
-                },
-                {
-                    "title": "False",
-                    "is_correct": false
-                }
-            ],
-            "correct_answer_key": "True"
-        }
-    ]
-    FORMAT;
-                $guidelines = '- You must generate exactly **' . $data['max_questions'] . '** True/False questions with exactly two options each: "True" and "False", with one marked as correct.';
-                break;
-
-            case 'Fill in the Blank':
-                $formatInstructions = <<<FORMAT
-    **Format for Fill in the Blank Questions:**
-    - Structure your JSON with one correct answer
-    - Use underscores (_____) in the question text for the blank
-    - Use the following format:
-
-    [
-        {
-            "question": "Your question text with _____ blank here",
-            "answers": [
-                {
-                    "title": "Correct word/phrase",
-                    "is_correct": true
-                }
-            ],
-            "correct_answer_key": "Correct word/phrase"
-        }
-    ]
-    FORMAT;
-                $guidelines = '- You must generate exactly **' . $data['max_questions'] . '** Fill in the Blank questions with underscores (_____) in the question text and one correct word/phrase as the answer.';
-                break;
-        }
-
-        $prompt = <<<PROMPT
-Generate EXACTLY {$data['max_questions']} {$quizData['question_type']} questions.
-
-Title: {$data['title']}
-Subject: {$description}
-Difficulty: {$quizData['Difficulty']}
-Language: {$data['language']}
-
-Format:
-{$formatInstructions}
-
-Guidelines:
-{$guidelines}
-
-CRITICAL: Generate EXACTLY {$data['max_questions']} questions. Count them before responding.
-
-Return ONLY JSON array with {$data['max_questions']} question objects. No explanations.
-PROMPT;
-
-        $aiType = getSetting()->ai_type;
-
         $totalQuestions = (int) $data['max_questions'];
-        $quizText = null; // Initialize quizText variable
 
-        if ($aiType == Quiz::GEMINI_AI) {
-            $geminiApiKey = getSetting()->gemini_api_key;
-            $model = getSetting()->gemini_ai_model;
+        // Create quiz record first
+        $quiz = Quiz::create($input);
 
-            if (! $geminiApiKey) {
+        // Show initial notification
                 Notification::make()
-                    ->danger()
-                    ->title(__('messages.quiz.set_openai_key_at_env'))
+            ->info()
+            ->title(__('Exam Creation Started'))
+            ->body(__('Your exam is being created. You will be notified when it\'s ready.'))
                     ->send();
-                $this->halt();
-            }
 
-            $geminiResponse = Http::withHeaders([
-                'Content-Type' => 'application/json',
-            ])->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$geminiApiKey}", [
-                'contents' => [
-                    [
-                        'parts' => [
-                            ['text' => $prompt],
-                        ],
-                    ],
-                ],
-            ]);
+        // Dispatch job for async processing
+        \App\Jobs\GenerateQuizJob::dispatch($quiz->id, $data, $totalQuestions)
+            ->onQueue('quiz-generation')
+            ->delay(now()->addSeconds(2));
 
-            if ($geminiResponse->failed()) {
+        // Show progress notification for large exams
+        if ($totalQuestions >= 20) {
                 Notification::make()
-                    ->danger()
-                    ->title($geminiResponse->json()['error']['message'])
+                ->info()
+                ->title(__('Large Exam Processing'))
+                ->body(__('Your exam has :count questions and will take some time to generate. You will be notified when ready.', ['count' => $totalQuestions]))
                     ->send();
-                $this->halt();
-            }
-
-            $rawText = $geminiResponse->json()['candidates'][0]['content']['parts'][0]['text'] ?? null;
-            $quizText = preg_replace('/^```(?:json)?|```$/im', '', $rawText);
         }
-        if ($aiType == Quiz::OPEN_AI) {
-            $key = getSetting()->open_api_key;
-            $openAiKey = (! empty($key)) ? $key : config('services.open_ai.open_api_key');
-            $model = getSetting()->open_ai_model;
-
-            if (! $openAiKey) {
-                Notification::make()
-                    ->danger()
-                    ->title(__('messages.quiz.set_openai_key_at_env'))
-                    ->send();
-                $this->halt();
-            }
-
-            try {
-                // Dynamic timeout based on question count
-                $timeout = $data['max_questions'] > 20 ? 300 : 180; // 5 minutes for large requests
-                
-                $quizResponse = Http::withToken($openAiKey)
-                    ->withHeaders([
-                        'Content-Type' => 'application/json',
-                    ])
-                    ->timeout($timeout)
-                    ->retry(3, 2000)
-                    ->post('https://api.openai.com/v1/chat/completions', [
-                        'model' => $model,
-                        'messages' => [
-                            [
-                                'role' => 'user',
-                                'content' => $prompt,
-                            ],
-                        ],
-                    ]);
-            } catch (\Exception $e) {
-                Notification::make()
-                    ->danger()
-                    ->title(__('API Connection Failed'))
-                    ->body(__('Unable to connect to OpenAI API. Please try again or contact support if the issue persists.'))
-                    ->send();
-                Log::error('OpenAI API connection error: ' . $e->getMessage());
-                $this->halt();
-            }
-
-            if ($quizResponse->failed()) {
-                $error = $quizResponse->json()['error']['message'] ?? 'Unknown error occurred';
-                Notification::make()->danger()->title(__('OpenAI Error'))->body($error)->send();
-                $this->halt();
-            }
-
-            $quizText = $quizResponse['choices'][0]['message']['content'] ?? null;
-            
-            // AI response received - continue to DB creation phase
-            if ($quizText) {
-                // keep inline indicator
-            }
-        }
-
-        // Check if we have a valid prompt before proceeding
-        if (empty($prompt)) {
-            Notification::make()
-                ->danger()
-                ->title(__('Invalid Quiz Data'))
-                ->body(__('Unable to generate quiz prompt. Please check your input data.'))
-                ->send();
-            $this->halt();
-        }
-
-        // Always use synchronous processing for now - keep it simple
-        try {
-            $model = getSetting()->open_ai_model;
-            if (empty($model)) {
-                $model = 'gpt-4o-mini';
-            }
-
-            $key = getSetting()->open_api_key;
-            $openAiKey = (! empty($key)) ? $key : config('services.open_ai.open_api_key');
-
-            if (! $openAiKey) {
-                Notification::make()
-                    ->danger()
-                    ->title(__('messages.quiz.set_openai_key_at_env'))
-                    ->send();
-                $this->halt();
-            }
-
-            // Optimized single attempt with Cloudflare-compatible timeout
-            \Log::info("Generating {$totalQuestions} questions with optimized timeout");
-            
-            $quizResponse = Http::withToken($openAiKey)
-                ->withHeaders([
-                    'Content-Type' => 'application/json',
-                ])
-                ->timeout(90) // Reduced timeout to prevent Cloudflare timeout
-                ->retry(1, 500) // Minimal retries
-                ->post('https://api.openai.com/v1/chat/completions', [
-                    'model' => $model,
-                    'messages' => [
-                        [
-                            'role' => 'user',
-                            'content' => $prompt,
-                        ],
-                    ],
-                ]);
-
-            if ($quizResponse->failed()) {
-                $error = $quizResponse->json()['error']['message'] ?? 'Unknown error occurred';
-                Notification::make()->danger()->title(__('OpenAI Error'))->body($error)->send();
-                $this->halt();
-            }
-
-            $quizText = $quizResponse['choices'][0]['message']['content'] ?? null;
-            $quizQuestions = [];
-            
-            if ($quizText) {
-                $quizData = trim($quizText);
-                if (stripos($quizData, '```json') === 0) {
-                    $quizData = preg_replace('/^```json\s*|\s*```$/', '', $quizData);
-                    $quizData = trim($quizData);
-                }
-                
-                $quizQuestions = json_decode($quizData, true);
-            }
-
-            if ($quizText) {
-                // Final validation - check if we got the exact number of questions
-                $generatedCount = count($quizQuestions);
-                if ($generatedCount != $totalQuestions) {
-                    \Log::warning("Generated {$generatedCount} questions instead of {$totalQuestions} requested");
-                    
-                    if ($generatedCount < $totalQuestions) {
-                        Notification::make()
-                            ->warning()
-                            ->title(__('Partial Quiz Generated'))
-                            ->body(__('AI generated :count questions instead of :total requested. You can add more questions manually.', [
-                                'count' => $generatedCount,
-                                'total' => $totalQuestions
-                            ]))
-                            ->send();
-                    } else {
-                        Notification::make()
-                            ->warning()
-                            ->title(__('Extra Questions Generated'))
-                            ->body(__('AI generated :count questions instead of :total requested. Extra questions will be ignored.', [
-                                'count' => $generatedCount,
-                                'total' => $totalQuestions
-                            ]))
-                            ->send();
-                        
-                        // Trim to exact count
-                        $quizQuestions = array_slice($quizQuestions, 0, $totalQuestions);
-                    }
-                } else {
-                    \Log::info("SUCCESS: Generated exactly {$totalQuestions} questions as requested");
-                }
-
-            // Final safety check - ensure we don't exceed the requested count
-            if (count($quizQuestions) > $totalQuestions) {
-                $quizQuestions = array_slice($quizQuestions, 0, $totalQuestions);
-                \Log::info("Trimmed questions to exact count: {$totalQuestions}");
-            }
-            
-            $quiz = Quiz::create($input);
-            $questionsCreated = 0;
-            
-            foreach ($quizQuestions as $index => $question) {
-                if (isset($question['question'], $question['answers'])) {
-                    $questionModel = Question::create([
-                        'quiz_id' => $quiz->id,
-                        'title' => $question['question'],
-                    ]);
-
-                    foreach ($question['answers'] as $answer) {
-                        $isCorrect = false;
-                        $correctKey = $question['correct_answer_key'];
-
-                        if (is_array($correctKey)) {
-                            $isCorrect = in_array($answer['title'], $correctKey);
-                        } else {
-                            $isCorrect = $answer['title'] === $correctKey;
-                        }
-
-                        Answer::create([
-                            'question_id' => $questionModel->id,
-                            'title' => $answer['title'],
-                            'is_correct' => $isCorrect,
-                        ]);
-                    }
-                    $questionsCreated++;
-                }
-            }
-
-            if ($questionsCreated > 0) {
-                try {
-                    app(\App\Services\PlanValidationService::class)->updateUsage(1, $questionsCreated);
-                } catch (\Throwable $e) {
-                            // Silently ignore counter update errors
-                }
 
                 return $quiz;
-            } else {
-                $quiz->delete();
-                        $this->halt();
-                    }
-                } else {
-                    Notification::make()
-                        ->danger()
-                        ->title(__('AI Response Error'))
-                        ->body(__('No response received from AI service. Please try again.'))
-                        ->send();
-                    $this->halt();
-                }
-        } catch (\Throwable $e) {
-            \Log::error("Quiz creation failed: " . $e->getMessage());
-            Notification::make()
-                ->danger()
-                ->title(__('Quiz Creation Failed'))
-                ->body(__('Unable to create quiz. Please try again.'))
-                ->send();
-            $this->halt();
-        }
-
-        $this->halt();
     }
 
     public function getTitle(): string
@@ -677,7 +243,6 @@ PROMPT;
     protected function getRedirectUrl(): string
     {
         $recordId = $this->record->id ?? null;
-
         return $recordId ? $this->getResource()::getUrl('edit', ['record' => $recordId]) : $this->getResource()::getUrl('index');
     }
 
@@ -692,34 +257,21 @@ PROMPT;
                 'wire:loading.attr' => 'disabled',
             ]);
 
-        $actions = [$create];
-        
-        // Don't show progress indicator on create page
-        // Progress will be handled by the button label and JavaScript
-        
-        $actions[] = Action::make('cancel')
-            ->label(__('messages.common.cancel'))
-            ->color('gray')
-            ->url(QuizzesResource::getUrl('index'));
-            
-        return $actions;
+        return [$create];
     }
 
     protected function getHeaderActions(): array
     {
-        // Exams Remaining button removed as requested
         return [];
     }
 
     public function mount(): void
     {
         parent::mount();
-        // No JavaScript needed for now - focus on exam creation first
     }
-    
+
     public function checkProgress(): void
     {
-        // Simple progress check - just refresh the page
         $this->dispatch('$refresh');
     }
 }
