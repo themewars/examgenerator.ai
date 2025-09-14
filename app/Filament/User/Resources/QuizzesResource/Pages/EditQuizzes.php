@@ -259,7 +259,6 @@ class EditQuizzes extends EditRecord
                 ->label('Add More Questions with AI')
                 ->color('success')
                 ->icon('heroicon-o-sparkles')
-                ->action('addMoreQuestionsWithAI')
                 ->requiresConfirmation()
                 ->modalHeading('Add More Questions with AI')
                 ->modalDescription('This will generate additional questions using AI based on your quiz content. How many questions would you like to add?')
@@ -272,7 +271,10 @@ class EditQuizzes extends EditRecord
                         ->default(3)
                         ->required()
                         ->helperText('Maximum 10 questions at a time to avoid API failures')
-                ]),
+                ])
+                ->action(function (array $data) {
+                    $this->addMoreQuestionsWithAI($data);
+                }),
             Action::make('regenerate')
                 ->label(__('messages.common.re_generate'))
                 ->color('gray')
