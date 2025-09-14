@@ -27,7 +27,7 @@
     @if($activeSubscription)
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
             <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Current Plan Information</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div class="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
                     <div class="flex items-center">
                         <div class="flex-shrink-0">
@@ -70,8 +70,13 @@
                             </svg>
                         </div>
                         <div class="ml-3">
-                            <p class="text-sm font-medium text-purple-900 dark:text-purple-100">Max Questions</p>
-                            <p class="text-lg font-semibold text-purple-600 dark:text-purple-400">{{ $activeSubscription->plan->max_questions_per_exam ?? 'Unlimited' }}</p>
+                            <p class="text-sm font-medium text-purple-900 dark:text-purple-100">Max Questions Per Exam</p>
+                            <p class="text-lg font-semibold text-purple-600 dark:text-purple-400">
+                                @php
+                                    $maxQuestions = $activeSubscription->plan->max_questions_per_exam;
+                                    echo $maxQuestions == -1 ? 'Unlimited' : $maxQuestions;
+                                @endphp
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -84,8 +89,32 @@
                             </svg>
                         </div>
                         <div class="ml-3">
-                            <p class="text-sm font-medium text-orange-900 dark:text-orange-100">Max Exams</p>
-                            <p class="text-lg font-semibold text-orange-600 dark:text-orange-400">{{ $activeSubscription->plan->max_exams ?? 'Unlimited' }}</p>
+                            <p class="text-sm font-medium text-orange-900 dark:text-orange-100">Exams Per Month</p>
+                            <p class="text-lg font-semibold text-orange-600 dark:text-orange-400">
+                                @php
+                                    $maxExams = $activeSubscription->plan->exams_per_month;
+                                    echo $maxExams == -1 ? 'Unlimited' : $maxExams;
+                                @endphp
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-4">
+                    <div class="flex items-center">
+                        <div class="flex-shrink-0">
+                            <svg class="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm font-medium text-indigo-900 dark:text-indigo-100">Max Questions Per Month</p>
+                            <p class="text-lg font-semibold text-indigo-600 dark:text-indigo-400">
+                                @php
+                                    $maxQuestionsPerMonth = $activeSubscription->plan->max_questions_per_month;
+                                    echo $maxQuestionsPerMonth == -1 ? 'Unlimited' : $maxQuestionsPerMonth;
+                                @endphp
+                            </p>
                         </div>
                     </div>
                 </div>

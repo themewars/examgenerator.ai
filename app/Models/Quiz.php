@@ -289,6 +289,9 @@ class Quiz extends Model implements HasMedia
                                                 ->rules(function () {
                                                     $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
                                                     $maxQuestions = $userPlan?->max_questions_per_exam ?? 20;
+                                                    if ($maxQuestions == -1) {
+                                                        $maxQuestions = 20; // Still limit to 20 for API safety
+                                                    }
                                                     return ['integer', 'max:' . min($maxQuestions, 20)];
                                                 })
                                                 ->integer()
@@ -296,7 +299,11 @@ class Quiz extends Model implements HasMedia
                                                 ->minValue(1)
                                                 ->maxValue(function () {
                                                     $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
-                                                    return min($userPlan?->max_questions_per_exam ?? 20, 20);
+                                                    $maxQuestions = $userPlan?->max_questions_per_exam ?? 20;
+                                                    if ($maxQuestions == -1) {
+                                                        $maxQuestions = 20; // Still limit to 20 for API safety
+                                                    }
+                                                    return min($maxQuestions, 20);
                                                 })
                                                 ->label(__('messages.quiz.num_of_questions') . ':')
                                                 ->hintIcon('heroicon-m-question-mark-circle', tooltip: 'Maximum 20 questions allowed to prevent API failures')
@@ -534,6 +541,9 @@ class Quiz extends Model implements HasMedia
                 ->addable(function () {
                     $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
                     $maxQuestions = $userPlan?->max_questions_per_exam ?? 20;
+                    if ($maxQuestions == -1) {
+                        $maxQuestions = 20; // Still limit to 20 for API safety
+                    }
                     $currentQuestions = $this->questions()->count();
                     $remainingQuestions = min($maxQuestions, 20) - $currentQuestions;
                     return $remainingQuestions > 0;

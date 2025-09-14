@@ -265,6 +265,9 @@ class EditQuizzes extends EditRecord
                 ->disabled(function () {
                     $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
                     $maxQuestions = $userPlan?->max_questions_per_exam ?? 20;
+                    if ($maxQuestions == -1) {
+                        $maxQuestions = 20; // Still limit to 20 for API safety
+                    }
                     $currentQuestions = $this->record->questions()->count();
                     $remainingQuestions = min($maxQuestions, 20) - $currentQuestions;
                     return $remainingQuestions <= 0;
@@ -277,6 +280,9 @@ class EditQuizzes extends EditRecord
                         ->maxValue(function () {
                             $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
                             $maxQuestions = $userPlan?->max_questions_per_exam ?? 20;
+                            if ($maxQuestions == -1) {
+                                $maxQuestions = 20; // Still limit to 20 for API safety
+                            }
                             $currentQuestions = $this->record->questions()->count();
                             $remainingQuestions = min($maxQuestions, 20) - $currentQuestions;
                             return max(min($remainingQuestions, 10), 1);
@@ -286,6 +292,9 @@ class EditQuizzes extends EditRecord
                         ->helperText(function () {
                             $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
                             $maxQuestions = $userPlan?->max_questions_per_exam ?? 20;
+                            if ($maxQuestions == -1) {
+                                $maxQuestions = 20; // Still limit to 20 for API safety
+                            }
                             $currentQuestions = $this->record->questions()->count();
                             $remainingQuestions = min($maxQuestions, 20) - $currentQuestions;
                             
@@ -545,6 +554,9 @@ class EditQuizzes extends EditRecord
             // Check plan limits
             $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
             $maxQuestions = $userPlan?->max_questions_per_exam ?? 20;
+            if ($maxQuestions == -1) {
+                $maxQuestions = 20; // Still limit to 20 for API safety
+            }
             $currentQuestions = $quiz->questions()->count();
             $remainingQuestions = min($maxQuestions, 20) - $currentQuestions;
             
