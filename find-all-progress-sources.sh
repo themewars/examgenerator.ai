@@ -4,7 +4,13 @@ echo "🔍 Finding All Progress Bar Sources"
 echo "==================================="
 
 # Navigate to project directory
-cd /var/www/html/public_html
+cd "C:\Users\rai37\OneDrive\Desktop\QuizWhiz AI v1.2.0"
+
+# Check if directory exists
+if [ ! -d "." ]; then
+    echo "❌ Error: Project directory not found!"
+    exit 1
+fi
 
 echo "📋 Checking all possible progress bar sources:"
 echo ""
