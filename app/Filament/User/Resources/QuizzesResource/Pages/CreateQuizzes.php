@@ -553,9 +553,7 @@ class CreateQuizzes extends CreateRecord
 
                 // Start progress tracking for this quiz
                 $this->js('
-                    // Clear any existing interval
                     if (window.progressInterval) clearInterval(window.progressInterval);
-                    // Start new interval
                     window.progressInterval = setInterval(window.checkQuizProgress, 3000);
                 ');
 
@@ -774,7 +772,6 @@ class CreateQuizzes extends CreateRecord
             if ($progressTotal > 0) {
                 $percentage = round(($progressDone / $progressTotal) * 100);
                 $this->js('
-                    // Update button label
                     const createButton = document.querySelector("[wire\\:target=\'create\']");
                     if (createButton) {
                         createButton.textContent = "Creating exam (' . $progressDone . '/' . $progressTotal . ') ' . $percentage . '%";
@@ -786,9 +783,7 @@ class CreateQuizzes extends CreateRecord
             if ($processingQuiz->generation_status === 'completed') {
                 // Stop the interval and redirect
                 $this->js('
-                    // Clear any existing intervals
                     if (window.progressInterval) clearInterval(window.progressInterval);
-                    // Redirect after delay
                     setTimeout(function() { 
                         window.location.href = "/user/quizzes/' . $processingQuiz->id . '/edit";
                     }, 1000);
