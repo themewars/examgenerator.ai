@@ -106,8 +106,9 @@ class CreateQuizzes extends CreateRecord
             Log::info("Starting real question generation for quiz {$quiz->id}");
             
             // Get AI settings
-            $openaiKey = getSetting('openai_key');
-            $geminiKey = getSetting('gemini_key');
+            $settings = getSetting();
+            $openaiKey = $settings->open_api_key ?? null;
+            $geminiKey = $settings->gemini_api_key ?? null;
             
             // Clean and validate API keys
             $openaiKey = $this->cleanApiKey($openaiKey);
@@ -151,7 +152,7 @@ class CreateQuizzes extends CreateRecord
             Log::info("AI response length: " . strlen($questions));
 
             // Parse and create questions
-            $questionCount = $this->parseAndCreateQuestions($quiz, $questions);
+            $questionCount = $this->createQuestionsAndAnswers($quiz, $questions);
             
             if ($questionCount == 0) {
                 Log::error("No questions parsed from AI response");
@@ -192,8 +193,9 @@ class CreateQuizzes extends CreateRecord
     {
         try {
             // Get AI settings
-            $openaiKey = getSetting('openai_key');
-            $geminiKey = getSetting('gemini_key');
+            $settings = getSetting();
+            $openaiKey = $settings->open_api_key ?? null;
+            $geminiKey = $settings->gemini_api_key ?? null;
             
             Log::info("AI Keys check - OpenAI: " . (!empty($openaiKey) ? 'Present' : 'Missing') . ", Gemini: " . (!empty($geminiKey) ? 'Present' : 'Missing'));
             
@@ -270,6 +272,10 @@ class CreateQuizzes extends CreateRecord
                 $apiKey = $decoded['key'];
             } elseif (isset($decoded['value'])) {
                 $apiKey = $decoded['value'];
+            } elseif (isset($decoded['open_api_key'])) {
+                $apiKey = $decoded['open_api_key'];
+            } elseif (isset($decoded['gemini_api_key'])) {
+                $apiKey = $decoded['gemini_api_key'];
             }
         }
         
@@ -378,7 +384,8 @@ CRITICAL REQUIREMENTS:
         return $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
     }
 
-    private function parseAndCreateQuestions($quiz, $aiResponse)
+
+    private function createQuestionsAndAnswers($quiz, $aiResponse)
     {
         Log::info("Parsing AI response for quiz {$quiz->id}");
         
@@ -428,47 +435,6 @@ CRITICAL REQUIREMENTS:
         }
 
         Log::info("Successfully parsed {$questionCount} questions from AI response");
-        return $questionCount;
-    }
-
-    private function createQuestionsAndAnswers($quiz, $aiResponse)
-    {
-        $lines = explode("\n", $aiResponse);
-        $currentQuestion = null;
-        $currentOptions = [];
-        $correctAnswer = null;
-        $questionCount = 0;
-
-        Log::info("Parsing AI response with " . count($lines) . " lines");
-
-        foreach ($lines as $line) {
-            $line = trim($line);
-            
-            if (strpos($line, 'Question:') === 0) {
-                // Save previous question if exists
-                if ($currentQuestion) {
-                    $this->saveQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
-                    $questionCount++;
-                }
-                
-                // Start new question
-                $currentQuestion = substr($line, 9);
-                $currentOptions = [];
-                $correctAnswer = null;
-            } elseif (strpos($line, 'A)') === 0 || strpos($line, 'B)') === 0 || strpos($line, 'C)') === 0 || strpos($line, 'D)') === 0) {
-                $currentOptions[] = $line;
-            } elseif (strpos($line, 'Correct:') === 0) {
-                $correctAnswer = substr($line, 8);
-            }
-        }
-
-        // Save last question
-        if ($currentQuestion) {
-            $this->saveQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
-            $questionCount++;
-        }
-
-        Log::info("Parsed {$questionCount} questions from AI response");
         return $questionCount;
     }
 
@@ -547,7 +513,7 @@ CRITICAL REQUIREMENTS:
             $isCorrect = false;
             
             // Check if this option matches the correct answer
-            if ($correctAnswer && isset($optionLetters[$index]) && $optionLetters[$index] === strtoupper($correctAnswer)) {
+            if ($correctAnswer && isset($optionLetters[$index]) && $optionLetters[$index] === strtoupper(trim($correctAnswer))) {
                 $isCorrect = true;
             }
 
