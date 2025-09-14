@@ -288,18 +288,18 @@ class Quiz extends Model implements HasMedia
                                                 ->numeric()
                                                 ->rules(function () {
                                                     $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
-                                                    $maxQuestions = $userPlan?->max_questions_per_exam ?? 25;
-                                                    return ['integer', 'max:' . $maxQuestions];
+                                                    $maxQuestions = $userPlan?->max_questions_per_exam ?? 20;
+                                                    return ['integer', 'max:' . min($maxQuestions, 20)];
                                                 })
                                                 ->integer()
                                                 ->required()
                                                 ->minValue(1)
                                                 ->maxValue(function () {
                                                     $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
-                                                    return $userPlan?->max_questions_per_exam ?? 25;
+                                                    return min($userPlan?->max_questions_per_exam ?? 20, 20);
                                                 })
                                                 ->label(__('messages.quiz.num_of_questions') . ':')
-                                                ->hintIcon('heroicon-m-question-mark-circle', tooltip: __('messages.quiz.max_no_of_quiz'))
+                                                ->hintIcon('heroicon-m-question-mark-circle', tooltip: 'Maximum 20 questions allowed to prevent API failures')
                                                 ->placeholder(__('messages.quiz.number_of_questions'))
                                                 ->validationAttribute(__('messages.quiz.num_of_questions')),
                                             Select::make('language')

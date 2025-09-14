@@ -267,10 +267,22 @@ class EditQuizzes extends EditRecord
                         ->label('Number of Questions')
                         ->numeric()
                         ->minValue(1)
-                        ->maxValue(10)
+                        ->maxValue(function () {
+                            $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
+                            $maxQuestions = $userPlan?->max_questions_per_exam ?? 20;
+                            $currentQuestions = $this->record->questions()->count();
+                            $remainingQuestions = min($maxQuestions, 20) - $currentQuestions;
+                            return min($remainingQuestions, 10);
+                        })
                         ->default(3)
                         ->required()
-                        ->helperText('Maximum 10 questions at a time to avoid API failures')
+                        ->helperText(function () {
+                            $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
+                            $maxQuestions = $userPlan?->max_questions_per_exam ?? 20;
+                            $currentQuestions = $this->record->questions()->count();
+                            $remainingQuestions = min($maxQuestions, 20) - $currentQuestions;
+                            return "Maximum 10 questions at a time. Plan allows {$maxQuestions} total questions. {$remainingQuestions} remaining.";
+                        })
                 ])
                 ->action(function (array $data) {
                     $this->addMoreQuestionsWithAI($data);
@@ -517,6 +529,30 @@ class EditQuizzes extends EditRecord
         try {
             $questionCount = $data['questionCount'];
             $quiz = $this->record;
+            
+            // Check plan limits
+            $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
+            $maxQuestions = $userPlan?->max_questions_per_exam ?? 20;
+            $currentQuestions = $quiz->questions()->count();
+            $remainingQuestions = min($maxQuestions, 20) - $currentQuestions;
+            
+            if ($questionCount > $remainingQuestions) {
+                Notification::make()
+                    ->danger()
+                    ->title('Question Limit Exceeded')
+                    ->body("You can only add {$remainingQuestions} more questions. Your plan allows {$maxQuestions} total questions.")
+                    ->send();
+                return;
+            }
+            
+            if ($questionCount > 10) {
+                Notification::make()
+                    ->danger()
+                    ->title('Too Many Questions')
+                    ->body('Maximum 10 questions can be added at a time to prevent API failures.')
+                    ->send();
+                return;
+            }
             
             Log::info("Adding {$questionCount} more questions with AI for quiz {$quiz->id}");
             
