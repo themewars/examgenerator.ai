@@ -11,14 +11,15 @@ class Question extends Model
 
     protected $fillable = [
         'title',
+        'type',
         'status',
         'quiz_id',
     ];
 
     protected $casts = [
         'title' => 'string',
+        'type' => 'integer',
         'status' => 'boolean'
-
     ];
 
     public function answers()
