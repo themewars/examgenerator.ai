@@ -207,32 +207,323 @@ class CreateQuizzes extends CreateRecord
         }
 
         $totalQuestions = (int) $data['max_questions'];
-
+        
         // Create quiz record first
         $quiz = Quiz::create($input);
-
+        
         // Show initial notification
-                Notification::make()
+        Notification::make()
             ->info()
             ->title(__('Exam Creation Started'))
             ->body(__('Your exam is being created. You will be notified when it\'s ready.'))
-                    ->send();
+            ->send();
 
-        // Dispatch job for async processing
-        \App\Jobs\GenerateQuizJob::dispatch($quiz->id, $data, $totalQuestions)
-            ->onQueue('quiz-generation')
-            ->delay(now()->addSeconds(2));
-
-        // Show progress notification for large exams
-        if ($totalQuestions >= 20) {
-                Notification::make()
-                ->info()
-                ->title(__('Large Exam Processing'))
-                ->body(__('Your exam has :count questions and will take some time to generate. You will be notified when ready.', ['count' => $totalQuestions]))
-                    ->send();
+        // For now, use synchronous processing to avoid Livewire issues
+        try {
+            $this->generateQuestionsSynchronously($quiz, $data, $totalQuestions);
+        } catch (\Exception $e) {
+            Log::error("Quiz generation failed: " . $e->getMessage());
+            $quiz->update(['generation_status' => 'failed']);
+            Notification::make()
+                ->danger()
+                ->title(__('Quiz Creation Failed'))
+                ->body(__('Unable to create quiz. Please try again.'))
+                ->send();
         }
 
-                return $quiz;
+        return $quiz;
+    }
+
+    private function generateQuestionsSynchronously(Quiz $quiz, array $data, int $totalQuestions): void
+    {
+        $aiType = getSetting()->ai_type;
+        $prompt = $this->buildPrompt($quiz, $data, $totalQuestions);
+
+        if ($aiType == Quiz::OPEN_AI) {
+            $questions = $this->generateWithOpenAI($prompt, $totalQuestions);
+        } elseif ($aiType == Quiz::GEMINI_AI) {
+            $questions = $this->generateWithGemini($prompt, $totalQuestions);
+        } else {
+            throw new \Exception('Unsupported AI type');
+        }
+
+        if (empty($questions)) {
+            throw new \Exception('No questions generated');
+        }
+
+        // Create questions and answers
+        $this->createQuestionsAndAnswers($quiz, $questions);
+
+        // Update quiz status
+        $quiz->update([
+            'generation_status' => 'completed',
+            'generation_progress_total' => $totalQuestions,
+            'generation_progress_created' => count($questions),
+        ]);
+
+        // Send success notification
+        Notification::make()
+            ->success()
+            ->title(__('Quiz Created Successfully'))
+            ->body(__('Your quiz has been created with :count questions.', ['count' => count($questions)]))
+            ->send();
+    }
+
+    private function buildPrompt(Quiz $quiz, array $data, int $totalQuestions): string
+    {
+        $questionType = Quiz::QUIZ_TYPE[$quiz->quiz_type];
+        $difficulty = Quiz::DIFF_LEVEL[$quiz->diff_level];
+        $language = getAllLanguages()[$quiz->language] ?? 'English';
+
+        $formatInstructions = $this->getFormatInstructions($questionType);
+        $guidelines = $this->getGuidelines($questionType, $totalQuestions);
+
+        return <<<PROMPT
+Generate EXACTLY {$totalQuestions} {$questionType} questions.
+
+Title: {$quiz->title}
+Subject: {$quiz->quiz_description}
+Difficulty: {$difficulty}
+Language: {$language}
+
+Format:
+{$formatInstructions}
+
+Guidelines:
+{$guidelines}
+
+CRITICAL REQUIREMENTS:
+1. Generate EXACTLY {$totalQuestions} questions - NO MORE, NO LESS
+2. Count your questions before responding
+3. Ensure each question has proper answers
+4. Return ONLY the JSON array with exactly {$totalQuestions} question objects
+
+VERIFICATION: Your response must contain exactly {$totalQuestions} question objects in the JSON array.
+
+Return ONLY JSON array with {$totalQuestions} question objects. No explanations, no additional text.
+PROMPT;
+    }
+
+    private function getFormatInstructions(string $questionType): string
+    {
+        switch ($questionType) {
+            case 'Multiple Choices':
+                return <<<FORMAT
+[
+    {
+        "question": "Your question here?",
+        "answers": [
+            {"title": "Option A", "is_correct": false},
+            {"title": "Option B", "is_correct": true},
+            {"title": "Option C", "is_correct": false},
+            {"title": "Option D", "is_correct": false}
+        ]
+    }
+]
+FORMAT;
+            case 'True/False':
+                return <<<FORMAT
+[
+    {
+        "question": "Your statement here?",
+        "answers": [
+            {"title": "True", "is_correct": true},
+            {"title": "False", "is_correct": false}
+        ]
+    }
+]
+FORMAT;
+            case 'Fill in the Blank':
+                return <<<FORMAT
+[
+    {
+        "question": "Complete this sentence: The capital of France is _____.?",
+        "answers": [
+            {"title": "Paris", "is_correct": true}
+        ]
+    }
+]
+FORMAT;
+            default:
+                return '';
+        }
+    }
+
+    private function getGuidelines(string $questionType, int $totalQuestions): string
+    {
+        switch ($questionType) {
+            case 'Multiple Choices':
+                return "- You must generate exactly **{$totalQuestions}** Multiple Choice questions with 4 options each, where only one option is correct.";
+            case 'True/False':
+                return "- You must generate exactly **{$totalQuestions}** True/False questions with only True or False as options.";
+            case 'Fill in the Blank':
+                return "- You must generate exactly **{$totalQuestions}** Fill in the Blank questions with underscores (_____) in the question text and one correct word/phrase as the answer.";
+            default:
+                return "- Generate exactly **{$totalQuestions}** questions of the specified type.";
+        }
+    }
+
+    private function generateWithOpenAI(string $prompt, int $totalQuestions): array
+    {
+        $openAiKey = getSetting()->open_api_key;
+        $model = getSetting()->open_ai_model ?? 'gpt-4o-mini';
+
+        if (!$openAiKey) {
+            throw new \Exception('OpenAI API key not configured');
+        }
+
+        $maxRetries = 3;
+        $questions = [];
+
+        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+            Log::info("OpenAI attempt {$attempt} for {$totalQuestions} questions");
+
+            try {
+                $response = Http::withToken($openAiKey)
+                    ->withHeaders(['Content-Type' => 'application/json'])
+                    ->timeout(120)
+                    ->retry(2, 1000)
+                    ->post('https://api.openai.com/v1/chat/completions', [
+                        'model' => $model,
+                        'messages' => [
+                            ['role' => 'user', 'content' => $prompt]
+                        ],
+                        'temperature' => 0.7,
+                        'max_tokens' => 4000,
+                    ]);
+
+                if ($response->failed()) {
+                    $error = $response->json()['error']['message'] ?? 'Unknown error';
+                    Log::error("OpenAI API error on attempt {$attempt}: {$error}");
+                    
+                    if ($attempt === $maxRetries) {
+                        throw new \Exception("OpenAI API failed after {$maxRetries} attempts: {$error}");
+                    }
+                    continue;
+                }
+
+                $content = $response['choices'][0]['message']['content'] ?? null;
+                if (!$content) {
+                    Log::warning("Empty response from OpenAI on attempt {$attempt}");
+                    continue;
+                }
+
+                $questions = $this->parseQuestions($content);
+                
+                if (count($questions) === $totalQuestions) {
+                    Log::info("Successfully generated {$totalQuestions} questions on attempt {$attempt}");
+                    break;
+                } else {
+                    Log::warning("Attempt {$attempt}: Generated " . count($questions) . " questions instead of {$totalQuestions}");
+                    
+                    if ($attempt < $maxRetries) {
+                        $prompt .= "\n\n🚨 RETRY ATTEMPT {$attempt}: You previously failed to generate exactly {$totalQuestions} questions. You MUST generate EXACTLY {$totalQuestions} questions this time. Count them carefully!";
+                    }
+                }
+
+            } catch (\Exception $e) {
+                Log::error("OpenAI attempt {$attempt} failed: " . $e->getMessage());
+                
+                if ($attempt === $maxRetries) {
+                    throw $e;
+                }
+            }
+        }
+
+        if (count($questions) !== $totalQuestions) {
+            Log::warning("Final result: Generated " . count($questions) . " questions instead of {$totalQuestions}");
+            
+            if (count($questions) > $totalQuestions) {
+                $questions = array_slice($questions, 0, $totalQuestions);
+                Log::info("Trimmed questions to exact count: {$totalQuestions}");
+            }
+        }
+
+        return $questions;
+    }
+
+    private function generateWithGemini(string $prompt, int $totalQuestions): array
+    {
+        $geminiKey = getSetting()->gemini_api_key;
+        $model = getSetting()->gemini_ai_model ?? 'gemini-pro';
+
+        if (!$geminiKey) {
+            throw new \Exception('Gemini API key not configured');
+        }
+
+        try {
+            $response = Http::withHeaders(['Content-Type' => 'application/json'])
+                ->timeout(120)
+                ->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$geminiKey}", [
+                    'contents' => [
+                        ['parts' => [['text' => $prompt]]]
+                    ],
+                ]);
+
+            if ($response->failed()) {
+                $error = $response->json()['error']['message'] ?? 'Unknown error';
+                throw new \Exception("Gemini API failed: {$error}");
+            }
+
+            $content = $response->json()['candidates'][0]['content']['parts'][0]['text'] ?? null;
+            if (!$content) {
+                throw new \Exception('Empty response from Gemini');
+            }
+
+            return $this->parseQuestions($content);
+
+        } catch (\Exception $e) {
+            Log::error("Gemini API error: " . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    private function parseQuestions(string $content): array
+    {
+        // Clean the content
+        $content = trim($content);
+        if (stripos($content, '```json') === 0) {
+            $content = preg_replace('/^```json\s*|\s*```$/', '', $content);
+            $content = trim($content);
+        }
+
+        $questions = json_decode($content, true);
+        
+        if (!is_array($questions)) {
+            Log::error("Failed to parse questions JSON: " . json_last_error_msg());
+            return [];
+        }
+
+        return $questions;
+    }
+
+    private function createQuestionsAndAnswers(Quiz $quiz, array $questions): void
+    {
+        $questionsCreated = 0;
+
+        foreach ($questions as $questionData) {
+            if (!isset($questionData['question'], $questionData['answers'])) {
+                Log::warning("Invalid question data: " . json_encode($questionData));
+                continue;
+            }
+
+            $question = Question::create([
+                'quiz_id' => $quiz->id,
+                'title' => $questionData['question'],
+            ]);
+
+            foreach ($questionData['answers'] as $answerData) {
+                Answer::create([
+                    'question_id' => $question->id,
+                    'title' => $answerData['title'],
+                    'is_correct' => $answerData['is_correct'] ?? false,
+                ]);
+            }
+
+            $questionsCreated++;
+        }
+
+        Log::info("Created {$questionsCreated} questions for quiz {$quiz->id}");
     }
 
     public function getTitle(): string
