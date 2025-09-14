@@ -539,41 +539,174 @@ class CreateQuizzes extends CreateRecord
             }
         }
 
-        // Always dispatch async job for better performance and progress tracking
-        try {
-            $quiz = Quiz::create($input + [
-                'generation_status' => 'processing',
-                'generation_progress_total' => $totalQuestions,
-                'generation_progress_done' => 0,
-            ]);
-
-            \Log::info("Created quiz {$quiz->id} for async processing");
-
-            $model = getSetting()->open_ai_model;
-            if (empty($model)) {
-                $model = 'gpt-4o-mini';
-            }
-            
-            // Progress will be tracked via database and UI refresh
-            
-            \App\Jobs\GenerateQuizJob::dispatch(
-                quizId: $quiz->id,
-                model: $model,
-                prompt: $prompt,
-                totalQuestions: $totalQuestions,
-                batchSize: 25
-            );
-
-            \Log::info("Dispatched GenerateQuizJob for quiz {$quiz->id}");
-
-            return $quiz;
-        } catch (\Throwable $e) {
-            \Log::error("Failed to create quiz or dispatch job: " . $e->getMessage());
+        // Check if we have a valid prompt before proceeding
+        if (empty($prompt)) {
+            Notification::make()
+                ->danger()
+                ->title(__('Invalid Quiz Data'))
+                ->body(__('Unable to generate quiz prompt. Please check your input data.'))
+                ->send();
             $this->halt();
         }
 
-        // This code is now handled by GenerateQuizJob
-        // All quiz creation is now async for better performance and progress tracking
+        // Use async processing for larger quizzes (20+ questions) or synchronous for smaller ones
+        if ($totalQuestions >= 20) {
+            // Async processing for larger quizzes
+            try {
+                $quiz = Quiz::create($input + [
+                    'generation_status' => 'processing',
+                    'generation_progress_total' => $totalQuestions,
+                    'generation_progress_done' => 0,
+                ]);
+
+                \Log::info("Created quiz {$quiz->id} for async processing with prompt length: " . strlen($prompt));
+
+                $model = getSetting()->open_ai_model;
+                if (empty($model)) {
+                    $model = 'gpt-4o-mini';
+                }
+                
+                \App\Jobs\GenerateQuizJob::dispatch(
+                    quizId: $quiz->id,
+                    model: $model,
+                    prompt: $prompt,
+                    totalQuestions: $totalQuestions,
+                    batchSize: 25
+                );
+
+                \Log::info("Dispatched GenerateQuizJob for quiz {$quiz->id}");
+
+                return $quiz;
+            } catch (\Throwable $e) {
+                \Log::error("Failed to create quiz or dispatch job: " . $e->getMessage());
+                Notification::make()
+                    ->danger()
+                    ->title(__('Quiz Creation Failed'))
+                    ->body(__('Unable to create quiz. Please try again.'))
+                    ->send();
+                $this->halt();
+            }
+        } else {
+            // Synchronous processing for smaller quizzes
+            try {
+                $model = getSetting()->open_ai_model;
+                if (empty($model)) {
+                    $model = 'gpt-4o-mini';
+                }
+
+                $key = getSetting()->open_api_key;
+                $openAiKey = (! empty($key)) ? $key : config('services.open_ai.open_api_key');
+
+                if (! $openAiKey) {
+                    Notification::make()
+                        ->danger()
+                        ->title(__('messages.quiz.set_openai_key_at_env'))
+                        ->send();
+                    $this->halt();
+                }
+
+                $quizResponse = Http::withToken($openAiKey)
+                    ->withHeaders([
+                        'Content-Type' => 'application/json',
+                    ])
+                    ->timeout(180)
+                    ->retry(3, 2000)
+                    ->post('https://api.openai.com/v1/chat/completions', [
+                        'model' => $model,
+                        'messages' => [
+                            [
+                                'role' => 'user',
+                                'content' => $prompt,
+                            ],
+                        ],
+                    ]);
+
+                if ($quizResponse->failed()) {
+                    $error = $quizResponse->json()['error']['message'] ?? 'Unknown error occurred';
+                    Notification::make()->danger()->title(__('OpenAI Error'))->body($error)->send();
+                    $this->halt();
+                }
+
+                $quizText = $quizResponse['choices'][0]['message']['content'] ?? null;
+                
+                if ($quizText) {
+                    $quizData = trim($quizText);
+                    if (stripos($quizData, '```json') === 0) {
+                        $quizData = preg_replace('/^```json\s*|\s*```$/', '', $quizData);
+                        $quizData = trim($quizData);
+                    }
+                    
+                    $quizQuestions = json_decode($quizData, true);
+
+                    if (!is_array($quizQuestions) || empty($quizQuestions)) {
+                        Notification::make()
+                            ->danger()
+                            ->title(__('messages.quiz.ai_response_error'))
+                            ->send();
+                        $this->halt();
+                    }
+
+                    $quiz = Quiz::create($input);
+                    $questionsCreated = 0;
+                    
+                    foreach ($quizQuestions as $index => $question) {
+                        if (isset($question['question'], $question['answers'])) {
+                            $questionModel = Question::create([
+                                'quiz_id' => $quiz->id,
+                                'title' => $question['question'],
+                            ]);
+
+                            foreach ($question['answers'] as $answer) {
+                                $isCorrect = false;
+                                $correctKey = $question['correct_answer_key'];
+
+                                if (is_array($correctKey)) {
+                                    $isCorrect = in_array($answer['title'], $correctKey);
+                                } else {
+                                    $isCorrect = $answer['title'] === $correctKey;
+                                }
+
+                                Answer::create([
+                                    'question_id' => $questionModel->id,
+                                    'title' => $answer['title'],
+                                    'is_correct' => $isCorrect,
+                                ]);
+                            }
+                            $questionsCreated++;
+                        }
+                    }
+
+                    if ($questionsCreated > 0) {
+                        try {
+                            app(\App\Services\PlanValidationService::class)->updateUsage(1, $questionsCreated);
+                        } catch (\Throwable $e) {
+                            // Silently ignore counter update errors
+                        }
+
+                        return $quiz;
+                    } else {
+                        $quiz->delete();
+                        $this->halt();
+                    }
+                } else {
+                    Notification::make()
+                        ->danger()
+                        ->title(__('AI Response Error'))
+                        ->body(__('No response received from AI service. Please try again.'))
+                        ->send();
+                    $this->halt();
+                }
+            } catch (\Throwable $e) {
+                \Log::error("Synchronous quiz creation failed: " . $e->getMessage());
+                Notification::make()
+                    ->danger()
+                    ->title(__('Quiz Creation Failed'))
+                    ->body(__('Unable to create quiz. Please try again.'))
+                    ->send();
+                $this->halt();
+            }
+        }
+
         $this->halt();
     }
 
