@@ -553,10 +553,9 @@ class CreateQuizzes extends CreateRecord
 
                 // Start progress tracking for this quiz
                 $this->js('
-                    // Start progress interval for this quiz
-                    if (window.progressInterval) {
-                        clearInterval(window.progressInterval);
-                    }
+                    // Clear any existing interval
+                    if (window.progressInterval) clearInterval(window.progressInterval);
+                    // Start new interval
                     window.progressInterval = setInterval(window.checkQuizProgress, 3000);
                 ');
 
@@ -788,11 +787,9 @@ class CreateQuizzes extends CreateRecord
                 // Stop the interval and redirect
                 $this->js('
                     // Clear any existing intervals
-                    if (window.progressInterval) {
-                        clearInterval(window.progressInterval);
-                    }
-                    
-                        setTimeout(function() { 
+                    if (window.progressInterval) clearInterval(window.progressInterval);
+                    // Redirect after delay
+                    setTimeout(function() { 
                         window.location.href = "/user/quizzes/' . $processingQuiz->id . '/edit";
                     }, 1000);
                 ');
@@ -801,9 +798,7 @@ class CreateQuizzes extends CreateRecord
         } else {
             // No processing quiz found, stop the interval
             $this->js('
-                if (window.progressInterval) {
-                    clearInterval(window.progressInterval);
-                }
+                if (window.progressInterval) clearInterval(window.progressInterval);
             ');
             return;
         }
