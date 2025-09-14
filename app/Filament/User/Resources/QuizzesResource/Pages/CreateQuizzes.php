@@ -82,19 +82,8 @@ class CreateQuizzes extends CreateRecord
             // Create quiz record
             $quiz = Quiz::create($data);
 
-            // Generate questions using AI (optional)
-            try {
-                $this->generateQuestionsWithAI($quiz, $description, $data['max_questions'] ?? 10);
-            } catch (\Exception $e) {
-                // If AI generation fails, still show success
-                $quiz->update(['generation_status' => 'completed']);
-                
-                Notification::make()
-                    ->success()
-                    ->title(__('Quiz Created Successfully'))
-                    ->body(__('Your quiz has been created. You can add questions manually.'))
-                        ->send();
-            }
+            // Always create sample questions for now
+            $this->createSampleQuestions($quiz, $data['max_questions'] ?? 10);
 
             return $quiz;
 
