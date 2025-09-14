@@ -394,10 +394,10 @@ class CreateQuizzes extends CreateRecord
     - **Difficulty**: {$quizData['Difficulty']}
     - **Question Type**: {$quizData['question_type']}
 
-    **Instructions:**
+    **CRITICAL REQUIREMENTS:**
 
-    1. **Language Requirement**: Write all quiz questions and answers in {$data['language']}. If the language is Hindi (hi), use proper Devanagari script with correct Hindi characters and grammar.
-    2. **CRITICAL - Number of Questions**: You MUST create EXACTLY {$data['max_questions']} questions. Not more, not less. Count them carefully.
+    1. **EXACT QUESTION COUNT**: You MUST generate EXACTLY {$data['max_questions']} questions. This is MANDATORY. Do not generate fewer or more questions.
+    2. **Language**: Write all quiz questions and answers in {$data['language']}. If the language is Hindi (hi), use proper Devanagari script with correct Hindi characters and grammar.
     3. **Difficulty Level**: Ensure each question adheres to the specified difficulty level: {$quizData['Difficulty']}.
     4. **Description Alignment**: Ensure that each question is relevant to and reflects key aspects of the provided description.
     5. **Question Type**: ALL questions must be of the type: {$quizData['question_type']}. Do not mix different question types.
@@ -410,11 +410,10 @@ class CreateQuizzes extends CreateRecord
     - The correct_answer_key should match the correct answer's title value.
     - Ensure that each question is diverse and well-crafted, covering various relevant concepts.
     - Do not create questions of any other type - only {$quizData['question_type']} questions.
-    - **IMPORTANT**: Before submitting, count your questions to ensure you have created exactly {$data['max_questions']} questions.
 
-    **Final Check**: Your JSON response must contain exactly {$data['max_questions']} question objects in the array.
+    **FINAL VERIFICATION**: Before submitting your response, count the questions in your JSON array. It must contain exactly {$data['max_questions']} question objects. If you have fewer questions, generate more. If you have more questions, remove the excess.
 
-    Your responses should be formatted impeccably in JSON, capturing the essence of the provided quiz details.
+    **OUTPUT FORMAT**: Return ONLY a JSON array with exactly {$data['max_questions']} question objects. No explanations, no additional text, just the JSON array.
 
     PROMPT;
 
@@ -526,22 +525,29 @@ class CreateQuizzes extends CreateRecord
 
         // Always use synchronous processing for now - keep it simple
         try {
-                $model = getSetting()->open_ai_model;
-                if (empty($model)) {
-                    $model = 'gpt-4o-mini';
-                }
+            $model = getSetting()->open_ai_model;
+            if (empty($model)) {
+                $model = 'gpt-4o-mini';
+            }
 
-                $key = getSetting()->open_api_key;
-                $openAiKey = (! empty($key)) ? $key : config('services.open_ai.open_api_key');
+            $key = getSetting()->open_api_key;
+            $openAiKey = (! empty($key)) ? $key : config('services.open_ai.open_api_key');
 
-                if (! $openAiKey) {
-                    Notification::make()
-                        ->danger()
-                        ->title(__('messages.quiz.set_openai_key_at_env'))
-                        ->send();
-                    $this->halt();
-                }
+            if (! $openAiKey) {
+                Notification::make()
+                    ->danger()
+                    ->title(__('messages.quiz.set_openai_key_at_env'))
+                    ->send();
+                $this->halt();
+            }
 
+            // Try multiple times to get exact number of questions
+            $maxRetries = 3;
+            $quizText = null;
+            
+            for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+                \Log::info("Attempt {$attempt} to generate {$totalQuestions} questions");
+                
                 $quizResponse = Http::withToken($openAiKey)
                     ->withHeaders([
                         'Content-Type' => 'application/json',
@@ -565,23 +571,43 @@ class CreateQuizzes extends CreateRecord
                 }
 
                 $quizText = $quizResponse['choices'][0]['message']['content'] ?? null;
-
-        if ($quizText) {
-            $quizData = trim($quizText);
-            if (stripos($quizData, '```json') === 0) {
-                $quizData = preg_replace('/^```json\s*|\s*```$/', '', $quizData);
-                $quizData = trim($quizData);
-            }
+                
+                if ($quizText) {
+                    $quizData = trim($quizText);
+                    if (stripos($quizData, '```json') === 0) {
+                        $quizData = preg_replace('/^```json\s*|\s*```$/', '', $quizData);
+                        $quizData = trim($quizData);
+                    }
                     
-            $quizQuestions = json_decode($quizData, true);
-
-            if (!is_array($quizQuestions) || empty($quizQuestions)) {
-                        Notification::make()
-                            ->danger()
-                            ->title(__('messages.quiz.ai_response_error'))
-                            ->send();
-                $this->halt();
+                    $quizQuestions = json_decode($quizData, true);
+                    
+                    if (is_array($quizQuestions) && count($quizQuestions) >= $totalQuestions) {
+                        \Log::info("Successfully generated " . count($quizQuestions) . " questions on attempt {$attempt}");
+                        break;
+                    } else {
+                        \Log::warning("Attempt {$attempt}: Generated only " . (count($quizQuestions) ?? 0) . " questions, retrying...");
+                        if ($attempt < $maxRetries) {
+                            // Add more emphasis to the prompt for retry
+                            $prompt .= "\n\n**RETRY ATTEMPT {$attempt}: You previously generated fewer questions than requested. Please ensure you generate EXACTLY {$totalQuestions} questions this time.**";
+                        }
+                    }
+                }
             }
+
+            if ($quizText) {
+                // Check if we got the exact number of questions requested
+                $generatedCount = count($quizQuestions);
+                if ($generatedCount < $totalQuestions) {
+                    \Log::warning("AI generated only {$generatedCount} questions instead of {$totalQuestions} requested after {$maxRetries} attempts");
+                    Notification::make()
+                        ->warning()
+                        ->title(__('Partial Quiz Generated'))
+                        ->body(__('AI generated :count questions instead of :total requested. You can add more questions manually.', [
+                            'count' => $generatedCount,
+                            'total' => $totalQuestions
+                        ]))
+                        ->send();
+                }
 
             $quiz = Quiz::create($input);
             $questionsCreated = 0;
