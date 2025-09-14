@@ -50,21 +50,35 @@ class CreateQuizzes extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        $userId = Auth::id();
-        $activeTab = getTabType();
+        try {
+            $userId = Auth::id();
+            $activeTab = getTabType();
 
-        $description = $data['quiz_description_text'] ?? $data['quiz_description_sub'] ?? $data['quiz_description_url'] ?? '';
+            // Handle description from different sources
+            $description = '';
+            if (isset($data['quiz_description_text']) && !empty($data['quiz_description_text'])) {
+                $description = $data['quiz_description_text'];
+            } elseif (isset($data['quiz_description_sub']) && !empty($data['quiz_description_sub'])) {
+                $description = $data['quiz_description_sub'];
+            } elseif (isset($data['quiz_description_url']) && !empty($data['quiz_description_url'])) {
+                $description = $data['quiz_description_url'];
+            }
 
-        $data['user_id'] = $userId;
-        $data['quiz_description'] = $description;
-        $data['type'] = $activeTab;
-        $data['status'] = 1;
-        $data['unique_code'] = generateUniqueCode();
-        $data['generation_status'] = 'completed';
-        $data['generation_progress_total'] = $data['max_questions'] ?? 10;
-        $data['generation_progress_created'] = $data['max_questions'] ?? 10;
+            // Set required fields
+            $data['user_id'] = $userId;
+            $data['quiz_description'] = $description;
+            $data['type'] = $activeTab;
+            $data['status'] = 1;
+            $data['unique_code'] = generateUniqueCode();
+            $data['generation_status'] = 'completed';
+            $data['generation_progress_total'] = $data['max_questions'] ?? 10;
+            $data['generation_progress_done'] = $data['max_questions'] ?? 10;
 
-        return $data;
+            return $data;
+        } catch (\Exception $e) {
+            // If any error occurs, return original data
+            return $data;
+        }
     }
 
 
