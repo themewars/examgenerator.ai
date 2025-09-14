@@ -48,58 +48,23 @@ class CreateQuizzes extends CreateRecord
         return $tabType[$tab] ?? Quiz::TEXT_TYPE;
     }
 
-    protected function handleRecordCreation(array $data): Model
+    protected function mutateFormDataBeforeCreate(array $data): array
     {
-        try {
-            $userId = Auth::id();
-            $activeTab = getTabType();
+        $userId = Auth::id();
+        $activeTab = getTabType();
 
-            $description = $data['quiz_description_text'] ?? $data['quiz_description_sub'] ?? $data['quiz_description_url'] ?? '';
+        $description = $data['quiz_description_text'] ?? $data['quiz_description_sub'] ?? $data['quiz_description_url'] ?? '';
 
-            $input = [
-                'user_id' => $userId,
-                'title' => $data['title'],
-                'category_id' => $data['category_id'],
-                'quiz_description' => $description,
-                'type' => $activeTab,
-                'status' => 1,
-                'quiz_type' => $data['quiz_type'] ?? 0,
-                'max_questions' => $data['max_questions'] ?? 10,
-                'diff_level' => $data['diff_level'] ?? 0,
-                'unique_code' => generateUniqueCode(),
-                'language' => $data['language'] ?? 'en',
-                'time_configuration' => $data['time_configuration'] ?? 0,
-                'time' => $data['time'] ?? 0,
-                'time_type' => $data['time_type'] ?? null,
-                'quiz_expiry_date' => $data['quiz_expiry_date'] ?? null,
-                'generation_status' => 'completed',
-                'generation_progress_total' => $data['max_questions'] ?? 10,
-                'generation_progress_created' => $data['max_questions'] ?? 10,
-            ];
+        $data['user_id'] = $userId;
+        $data['quiz_description'] = $description;
+        $data['type'] = $activeTab;
+        $data['status'] = 1;
+        $data['unique_code'] = generateUniqueCode();
+        $data['generation_status'] = 'completed';
+        $data['generation_progress_total'] = $data['max_questions'] ?? 10;
+        $data['generation_progress_created'] = $data['max_questions'] ?? 10;
 
-            // Create quiz record
-            $quiz = Quiz::create($input);
-
-            // Show success notification
-            Notification::make()
-                ->success()
-                ->title(__('Quiz Created Successfully'))
-                ->body(__('Your quiz has been created successfully.'))
-                ->send();
-
-            return $quiz;
-
-        } catch (\Exception $e) {
-            Log::error("Quiz creation error: " . $e->getMessage());
-            
-            Notification::make()
-                ->danger()
-                ->title(__('Quiz Creation Failed'))
-                ->body(__('Unable to create quiz. Please try again.'))
-                ->send();
-                
-            throw $e;
-        }
+        return $data;
     }
 
 
