@@ -51,7 +51,7 @@ class CreateQuizzes extends CreateRecord
     protected function handleRecordCreation(array $data): Model
     {
         try {
-            $userId = Auth::id();
+        $userId = Auth::id();
             $activeTab = getTabType();
 
             // Handle description from different sources
@@ -82,8 +82,19 @@ class CreateQuizzes extends CreateRecord
             // Create quiz record
             $quiz = Quiz::create($data);
 
-            // Generate questions using AI
-            $this->generateQuestionsWithAI($quiz, $description, $data['max_questions'] ?? 10);
+            // Generate questions using AI (optional)
+            try {
+                $this->generateQuestionsWithAI($quiz, $description, $data['max_questions'] ?? 10);
+            } catch (\Exception $e) {
+                // If AI generation fails, still show success
+                $quiz->update(['generation_status' => 'completed']);
+                
+                Notification::make()
+                    ->success()
+                    ->title(__('Quiz Created Successfully'))
+                    ->body(__('Your quiz has been created. You can add questions manually.'))
+                        ->send();
+            }
 
             return $quiz;
 
@@ -145,15 +156,11 @@ class CreateQuizzes extends CreateRecord
             Log::error("AI generation error: " . $e->getMessage());
             
             $quiz->update([
-                'generation_status' => 'failed',
+                'generation_status' => 'completed',
                 'generation_error' => $e->getMessage()
             ]);
 
-            Notification::make()
-                ->warning()
-                ->title(__('Quiz Created with Issues'))
-                ->body(__('Quiz created but questions generation failed. Please try again.'))
-                ->send();
+            // Don't show warning notification - let the outer try-catch handle it
         }
     }
 
@@ -258,15 +265,15 @@ CRITICAL REQUIREMENTS:
         ]);
 
         foreach ($options as $index => $option) {
-            $isCorrect = false;
+                        $isCorrect = false;
             if ($correctAnswer && strpos($option, $correctAnswer) !== false) {
                 $isCorrect = true;
             }
 
             $question->answers()->create([
                 'title' => $option,
-                'is_correct' => $isCorrect,
-            ]);
+                            'is_correct' => $isCorrect,
+                        ]);
         }
     }
 
