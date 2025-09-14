@@ -137,24 +137,6 @@ class EditQuizzes extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
-            Action::make('addMoreQuestionsWithAI')
-                ->label('Add More Questions with AI')
-                ->color('success')
-                ->icon('heroicon-o-sparkles')
-                ->action('addMoreQuestionsWithAI')
-                ->requiresConfirmation()
-                ->modalHeading('Add More Questions with AI')
-                ->modalDescription('This will generate additional questions using AI based on your quiz content. How many questions would you like to add?')
-                ->form([
-                    \Filament\Forms\Components\TextInput::make('questionCount')
-                        ->label('Number of Questions')
-                        ->numeric()
-                        ->minValue(1)
-                        ->maxValue(10)
-                        ->default(3)
-                        ->required()
-                        ->helperText('Maximum 10 questions at a time to avoid API failures')
-                ]),
             Action::make('back')
                 ->label(__('messages.common.back'))
                 ->url($this->getResource()::getUrl('index')),
@@ -273,6 +255,24 @@ class EditQuizzes extends EditRecord
     {
         return [
             parent::getFormActions()[0],
+            Action::make('addMoreQuestionsWithAI')
+                ->label('Add More Questions with AI')
+                ->color('success')
+                ->icon('heroicon-o-sparkles')
+                ->action('addMoreQuestionsWithAI')
+                ->requiresConfirmation()
+                ->modalHeading('Add More Questions with AI')
+                ->modalDescription('This will generate additional questions using AI based on your quiz content. How many questions would you like to add?')
+                ->form([
+                    \Filament\Forms\Components\TextInput::make('questionCount')
+                        ->label('Number of Questions')
+                        ->numeric()
+                        ->minValue(1)
+                        ->maxValue(10)
+                        ->default(3)
+                        ->required()
+                        ->helperText('Maximum 10 questions at a time to avoid API failures')
+                ]),
             Action::make('regenerate')
                 ->label(__('messages.common.re_generate'))
                 ->color('gray')
