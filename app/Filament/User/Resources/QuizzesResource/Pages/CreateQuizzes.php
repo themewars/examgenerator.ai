@@ -383,39 +383,22 @@ class CreateQuizzes extends CreateRecord
         }
 
         $prompt = <<<PROMPT
+Generate exactly {$data['max_questions']} {$quizData['question_type']} questions for: {$data['title']}
 
-    You are an expert in crafting engaging quizzes. Based on the quiz details provided, your task is to meticulously generate questions according to the specified question type. Your output should be exclusively in properly formatted JSON.
+Subject: {$description}
+Difficulty: {$quizData['Difficulty']}
+Language: {$data['language']}
 
-    **Quiz Details:**
+Format:
+{$formatInstructions}
 
-    - **Title**: {$data['title']}
-    - **Description**: {$description}
-    - **Number of Questions**: {$data['max_questions']}
-    - **Difficulty**: {$quizData['Difficulty']}
-    - **Question Type**: {$quizData['question_type']}
+Guidelines:
+{$guidelines}
 
-    **CRITICAL REQUIREMENTS:**
+CRITICAL: Generate EXACTLY {$data['max_questions']} questions. Count them before responding.
 
-    1. **EXACT QUESTION COUNT**: You MUST generate EXACTLY {$data['max_questions']} questions. This is MANDATORY. Do not generate fewer or more questions.
-    2. **Language**: Write all quiz questions and answers in {$data['language']}. If the language is Hindi (hi), use proper Devanagari script with correct Hindi characters and grammar.
-    3. **Difficulty Level**: Ensure each question adheres to the specified difficulty level: {$quizData['Difficulty']}.
-    4. **Description Alignment**: Ensure that each question is relevant to and reflects key aspects of the provided description.
-    5. **Question Type**: ALL questions must be of the type: {$quizData['question_type']}. Do not mix different question types.
-    6. **Format**: Follow the format specified below for the selected question type ONLY:
-
-    {$formatInstructions}
-
-    **Guidelines:**
-    {$guidelines}
-    - The correct_answer_key should match the correct answer's title value.
-    - Ensure that each question is diverse and well-crafted, covering various relevant concepts.
-    - Do not create questions of any other type - only {$quizData['question_type']} questions.
-
-    **FINAL VERIFICATION**: Before submitting your response, count the questions in your JSON array. It must contain exactly {$data['max_questions']} question objects. If you have fewer questions, generate more. If you have more questions, remove the excess.
-
-    **OUTPUT FORMAT**: Return ONLY a JSON array with exactly {$data['max_questions']} question objects. No explanations, no additional text, just the JSON array.
-
-    PROMPT;
+Return ONLY JSON array with {$data['max_questions']} question objects. No explanations.
+PROMPT;
 
         $aiType = getSetting()->ai_type;
 
@@ -541,64 +524,48 @@ class CreateQuizzes extends CreateRecord
                 $this->halt();
             }
 
-            // Try multiple times to get exact number of questions
-            $maxRetries = 3;
-            $quizText = null;
+            // Single attempt with optimized timeout to prevent Cloudflare timeout
+            \Log::info("Generating {$totalQuestions} questions");
             
-            for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
-                \Log::info("Attempt {$attempt} to generate {$totalQuestions} questions");
-                
-                $quizResponse = Http::withToken($openAiKey)
-                    ->withHeaders([
-                        'Content-Type' => 'application/json',
-                    ])
-                    ->timeout(180)
-                    ->retry(3, 2000)
-                    ->post('https://api.openai.com/v1/chat/completions', [
-                        'model' => $model,
-                        'messages' => [
-                            [
-                                'role' => 'user',
-                                'content' => $prompt,
-                            ],
+            $quizResponse = Http::withToken($openAiKey)
+                ->withHeaders([
+                    'Content-Type' => 'application/json',
+                ])
+                ->timeout(120) // Reduced timeout to prevent Cloudflare timeout
+                ->retry(2, 1000) // Reduced retries
+                ->post('https://api.openai.com/v1/chat/completions', [
+                    'model' => $model,
+                    'messages' => [
+                        [
+                            'role' => 'user',
+                            'content' => $prompt,
                         ],
-                    ]);
+                    ],
+                ]);
 
-                if ($quizResponse->failed()) {
-                    $error = $quizResponse->json()['error']['message'] ?? 'Unknown error occurred';
-                    Notification::make()->danger()->title(__('OpenAI Error'))->body($error)->send();
-                    $this->halt();
+            if ($quizResponse->failed()) {
+                $error = $quizResponse->json()['error']['message'] ?? 'Unknown error occurred';
+                Notification::make()->danger()->title(__('OpenAI Error'))->body($error)->send();
+                $this->halt();
+            }
+
+            $quizText = $quizResponse['choices'][0]['message']['content'] ?? null;
+            
+            if ($quizText) {
+                $quizData = trim($quizText);
+                if (stripos($quizData, '```json') === 0) {
+                    $quizData = preg_replace('/^```json\s*|\s*```$/', '', $quizData);
+                    $quizData = trim($quizData);
                 }
-
-                $quizText = $quizResponse['choices'][0]['message']['content'] ?? null;
                 
-                if ($quizText) {
-                    $quizData = trim($quizText);
-                    if (stripos($quizData, '```json') === 0) {
-                        $quizData = preg_replace('/^```json\s*|\s*```$/', '', $quizData);
-                        $quizData = trim($quizData);
-                    }
-                    
-                    $quizQuestions = json_decode($quizData, true);
-                    
-                    if (is_array($quizQuestions) && count($quizQuestions) >= $totalQuestions) {
-                        \Log::info("Successfully generated " . count($quizQuestions) . " questions on attempt {$attempt}");
-                        break;
-                    } else {
-                        \Log::warning("Attempt {$attempt}: Generated only " . (count($quizQuestions) ?? 0) . " questions, retrying...");
-                        if ($attempt < $maxRetries) {
-                            // Add more emphasis to the prompt for retry
-                            $prompt .= "\n\n**RETRY ATTEMPT {$attempt}: You previously generated fewer questions than requested. Please ensure you generate EXACTLY {$totalQuestions} questions this time.**";
-                        }
-                    }
-                }
+                $quizQuestions = json_decode($quizData, true);
             }
 
             if ($quizText) {
                 // Check if we got the exact number of questions requested
                 $generatedCount = count($quizQuestions);
                 if ($generatedCount < $totalQuestions) {
-                    \Log::warning("AI generated only {$generatedCount} questions instead of {$totalQuestions} requested after {$maxRetries} attempts");
+                    \Log::warning("AI generated only {$generatedCount} questions instead of {$totalQuestions} requested");
                     Notification::make()
                         ->warning()
                         ->title(__('Partial Quiz Generated'))
