@@ -529,7 +529,7 @@ class Quiz extends Model implements HasMedia
                 ->columnSpanFull()
                 ->label('')
                 ->reorderableWithDragAndDrop(true)
-                ->addActionLabel(__('messages.common.add_new_question'))
+                ->addActionLabel('Add New Question Manual')
                 ->hidden(fn(string $operation): bool => $operation === 'create')
                 ->schema([
                     TextInput::make('title')

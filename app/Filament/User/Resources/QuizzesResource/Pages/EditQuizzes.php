@@ -802,4 +802,11 @@ Continue this pattern for all {$questionCount} questions.";
         
         Log::info("Additional question saved: " . substr($questionText, 0, 50) . "... with " . count($options) . " options");
     }
+
+    protected function getFooterWidgets(): array
+    {
+        return [
+            \App\Filament\User\Resources\QuizzesResource\Widgets\QuestionCountWidget::class,
+        ];
+    }
 }
