@@ -118,38 +118,50 @@ class CreateQuizzes extends CreateRecord
             $openaiKey = getSetting('openai_key');
             $geminiKey = getSetting('gemini_key');
             
+            Log::info("AI Keys check - OpenAI: " . (!empty($openaiKey) ? 'Present' : 'Missing') . ", Gemini: " . (!empty($geminiKey) ? 'Present' : 'Missing'));
+            
             if (empty($openaiKey) && empty($geminiKey)) {
-                throw new \Exception('No AI keys configured');
+                Log::warning("No AI keys configured - creating sample questions");
+                $this->createSampleQuestions($quiz, $maxQuestions);
+                return;
             }
 
             // Build prompt
             $prompt = $this->buildPrompt($description, $maxQuestions);
+            Log::info("Generated prompt length: " . strlen($prompt));
             
             // Generate with OpenAI or Gemini
             $questions = null;
             if (!empty($openaiKey)) {
+                Log::info("Attempting OpenAI generation");
                 $questions = $this->generateWithOpenAI($prompt, $openaiKey);
             } elseif (!empty($geminiKey)) {
+                Log::info("Attempting Gemini generation");
                 $questions = $this->generateWithGemini($prompt, $geminiKey);
             }
 
             if (empty($questions)) {
-                throw new \Exception('Failed to generate questions');
+                Log::error("AI returned empty response");
+                throw new \Exception('Failed to generate questions - empty response');
             }
 
+            Log::info("AI response length: " . strlen($questions));
+
             // Parse and create questions
-            $this->createQuestionsAndAnswers($quiz, $questions);
+            $questionCount = $this->createQuestionsAndAnswers($quiz, $questions);
+            
+            Log::info("Created {$questionCount} questions for quiz {$quiz->id}");
 
             // Update quiz status
             $quiz->update([
                 'generation_status' => 'completed',
-                'generation_progress_done' => $maxQuestions
+                'generation_progress_done' => $questionCount
             ]);
 
             Notification::make()
                 ->success()
                 ->title(__('Quiz Created Successfully'))
-                ->body(__('Your quiz has been created with ' . $maxQuestions . ' questions.'))
+                ->body(__('Your quiz has been created with ' . $questionCount . ' questions.'))
                 ->send();
 
         } catch (\Exception $e) {
@@ -230,6 +242,9 @@ CRITICAL REQUIREMENTS:
         $currentQuestion = null;
         $currentOptions = [];
         $correctAnswer = null;
+        $questionCount = 0;
+
+        Log::info("Parsing AI response with " . count($lines) . " lines");
 
         foreach ($lines as $line) {
             $line = trim($line);
@@ -238,6 +253,7 @@ CRITICAL REQUIREMENTS:
                 // Save previous question if exists
                 if ($currentQuestion) {
                     $this->saveQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
+                    $questionCount++;
                 }
                 
                 // Start new question
@@ -254,7 +270,73 @@ CRITICAL REQUIREMENTS:
         // Save last question
         if ($currentQuestion) {
             $this->saveQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
+            $questionCount++;
         }
+
+        Log::info("Parsed {$questionCount} questions from AI response");
+        return $questionCount;
+    }
+
+    private function createSampleQuestions($quiz, $maxQuestions)
+    {
+        $sampleQuestions = [
+            [
+                'question' => 'What is the capital of France?',
+                'options' => ['London', 'Paris', 'Berlin', 'Madrid'],
+                'correct' => 1
+            ],
+            [
+                'question' => 'Which planet is closest to the Sun?',
+                'options' => ['Venus', 'Mercury', 'Earth', 'Mars'],
+                'correct' => 1
+            ],
+            [
+                'question' => 'What is 2 + 2?',
+                'options' => ['3', '4', '5', '6'],
+                'correct' => 1
+            ],
+            [
+                'question' => 'Who wrote "Romeo and Juliet"?',
+                'options' => ['Charles Dickens', 'William Shakespeare', 'Mark Twain', 'Jane Austen'],
+                'correct' => 1
+            ],
+            [
+                'question' => 'What is the largest ocean?',
+                'options' => ['Atlantic', 'Pacific', 'Indian', 'Arctic'],
+                'correct' => 1
+            ]
+        ];
+
+        $questionsToCreate = min($maxQuestions, count($sampleQuestions));
+        
+        for ($i = 0; $i < $questionsToCreate; $i++) {
+            $sample = $sampleQuestions[$i];
+            
+            $question = $quiz->questions()->create([
+                'title' => $sample['question'],
+                'type' => 0, // Multiple choice
+            ]);
+
+            foreach ($sample['options'] as $index => $option) {
+                $question->answers()->create([
+                    'title' => $option,
+                    'is_correct' => ($index === $sample['correct']),
+                ]);
+            }
+        }
+
+        Log::info("Created {$questionsToCreate} sample questions for quiz {$quiz->id}");
+        
+        $quiz->update([
+            'generation_status' => 'completed',
+            'generation_progress_done' => $questionsToCreate
+        ]);
+
+        Notification::make()
+            ->success()
+            ->title(__('Quiz Created Successfully'))
+            ->body(__('Your quiz has been created with ' . $questionsToCreate . ' sample questions.'))
+            ->send();
     }
 
     private function saveQuestion($quiz, $questionText, $options, $correctAnswer)
@@ -265,15 +347,15 @@ CRITICAL REQUIREMENTS:
         ]);
 
         foreach ($options as $index => $option) {
-                        $isCorrect = false;
+            $isCorrect = false;
             if ($correctAnswer && strpos($option, $correctAnswer) !== false) {
                 $isCorrect = true;
             }
 
             $question->answers()->create([
                 'title' => $option,
-                            'is_correct' => $isCorrect,
-                        ]);
+                'is_correct' => $isCorrect,
+            ]);
         }
     }
 
