@@ -149,14 +149,14 @@ class CreateQuizzes extends CreateRecord
                         $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
                         if ($userPlan && $userPlan->max_pdf_pages_allowed && $userPlan->max_pdf_pages_allowed > 0 && $pages && $pages > $userPlan->max_pdf_pages_allowed) {
                             Notification::make()->danger()->title(__('This PDF is too large for your current plan. Please upgrade to a higher plan.'))->send();
-                            $this->halt();
+                            return null;
                         }
                         if ($userPlan && $userPlan->max_website_tokens_allowed) {
                             $estimated = \App\Services\TokenEstimator::estimateTokens($description ?? '');
                             $maxTokens = $userPlan->max_website_tokens_allowed;
                             if ($maxTokens > 0 && $estimated > $maxTokens) {
                                 Notification::make()->danger()->title(__('Your file exceeds the allowed limit for this plan. Please upgrade to continue.'))->send();
-                                $this->halt();
+                                return null;
                             }
                         }
                         $input['type'] = Quiz::UPLOAD_TYPE;
@@ -176,7 +176,7 @@ class CreateQuizzes extends CreateRecord
             $maxImages = $userPlan?->max_images_allowed;
             if ($maxImages && $maxImages > 0 && count($data['image_upload']) > $maxImages) {
                 Notification::make()->danger()->title(__('Your file exceeds the allowed limit for this plan. Please upgrade to continue.'))->send();
-                $this->halt();
+                return null;
             }
             foreach ($data['image_upload'] as $file) {
                 if ($file instanceof \Illuminate\Http\UploadedFile) {
@@ -191,7 +191,7 @@ class CreateQuizzes extends CreateRecord
                                 $maxTokens = $userPlan->max_website_tokens_allowed;
                                 if ($maxTokens > 0 && $estimated > $maxTokens) {
                                     Notification::make()->danger()->title(__('Your file exceeds the allowed limit for this plan. Please upgrade to continue.'))->send();
-                                    $this->halt();
+                                    return null;
                                 }
                             }
                             break;
