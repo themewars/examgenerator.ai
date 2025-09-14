@@ -137,6 +137,24 @@ class EditQuizzes extends EditRecord
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('addMoreQuestionsWithAI')
+                ->label('Add More Questions with AI')
+                ->color('success')
+                ->icon('heroicon-o-sparkles')
+                ->action('addMoreQuestionsWithAI')
+                ->requiresConfirmation()
+                ->modalHeading('Add More Questions with AI')
+                ->modalDescription('This will generate additional questions using AI based on your quiz content. How many questions would you like to add?')
+                ->form([
+                    \Filament\Forms\Components\TextInput::make('questionCount')
+                        ->label('Number of Questions')
+                        ->numeric()
+                        ->minValue(1)
+                        ->maxValue(10)
+                        ->default(3)
+                        ->required()
+                        ->helperText('Maximum 10 questions at a time to avoid API failures')
+                ]),
             Action::make('back')
                 ->label(__('messages.common.back'))
                 ->url($this->getResource()::getUrl('index')),
@@ -249,6 +267,7 @@ class EditQuizzes extends EditRecord
     {
         return $this->getResource()::getUrl('index');
     }
+
 
     protected function getFormActions(): array
     {
@@ -489,5 +508,296 @@ class EditQuizzes extends EditRecord
                 ->title('Quiz generation failed.')
                 ->send();
         }
+    }
+
+    public function addMoreQuestionsWithAI(array $data): void
+    {
+        try {
+            $questionCount = $data['questionCount'];
+            $quiz = $this->record;
+            
+            Log::info("Adding {$questionCount} more questions with AI for quiz {$quiz->id}");
+            
+            // Get AI settings
+            $settings = getSetting();
+            $openaiKey = $settings->open_api_key ?? null;
+            $geminiKey = $settings->gemini_api_key ?? null;
+            
+            // Clean and validate API keys
+            $openaiKey = $this->cleanApiKey($openaiKey);
+            $geminiKey = $this->cleanApiKey($geminiKey);
+            
+            if (empty($openaiKey) && empty($geminiKey)) {
+                Notification::make()
+                    ->danger()
+                    ->title('AI Keys Not Found')
+                    ->body('Please configure OpenAI or Gemini API key in settings.')
+                    ->send();
+                return;
+            }
+            
+            // Get quiz description for context
+            $description = $quiz->quiz_description ?? 'General knowledge questions';
+            
+            // Build optimized prompt for additional questions
+            $prompt = $this->buildAdditionalQuestionsPrompt($description, $questionCount);
+            
+            Log::info("Generated prompt for additional questions: " . strlen($prompt) . " characters");
+            
+            // Try OpenAI first, then Gemini
+            $questions = null;
+            if (!empty($openaiKey)) {
+                Log::info("Attempting OpenAI generation for additional questions");
+                $questions = $this->generateWithOpenAI($prompt, $openaiKey);
+                if (!empty($questions)) {
+                    Log::info("OpenAI generation successful for additional questions");
+                }
+            }
+            
+            if (empty($questions) && !empty($geminiKey)) {
+                Log::info("Attempting Gemini generation for additional questions");
+                $questions = $this->generateWithGemini($prompt, $geminiKey);
+                if (!empty($questions)) {
+                    Log::info("Gemini generation successful for additional questions");
+                }
+            }
+            
+            if (empty($questions)) {
+                Log::error("Both AI services failed for additional questions");
+                Notification::make()
+                    ->danger()
+                    ->title('AI Generation Failed')
+                    ->body('Failed to generate additional questions. Please try again.')
+                    ->send();
+                return;
+            }
+            
+            // Parse and create questions
+            $createdCount = $this->createAdditionalQuestions($quiz, $questions);
+            
+            if ($createdCount > 0) {
+                Notification::make()
+                    ->success()
+                    ->title('Questions Added Successfully')
+                    ->body("Added {$createdCount} new questions to your quiz.")
+                    ->send();
+                
+                // Refresh the form to show new questions
+                $this->fillForm();
+            } else {
+                Notification::make()
+                    ->warning()
+                    ->title('No Questions Added')
+                    ->body('Could not parse questions from AI response. Please try again.')
+                    ->send();
+            }
+            
+        } catch (\Exception $e) {
+            Log::error("Error adding more questions with AI: " . $e->getMessage());
+            Notification::make()
+                ->danger()
+                ->title('Error')
+                ->body('An error occurred while adding questions. Please try again.')
+                ->send();
+        }
+    }
+
+    private function cleanApiKey($apiKey)
+    {
+        if (empty($apiKey)) {
+            return null;
+        }
+        
+        // Remove any extra whitespace
+        $apiKey = trim($apiKey);
+        
+        // Remove any JSON-like formatting that might be stored incorrectly
+        if (strpos($apiKey, '{"id":') === 0) {
+            // This looks like a JSON object, extract the actual key
+            $decoded = json_decode($apiKey, true);
+            if (isset($decoded['key'])) {
+                $apiKey = $decoded['key'];
+            } elseif (isset($decoded['value'])) {
+                $apiKey = $decoded['value'];
+            } elseif (isset($decoded['open_api_key'])) {
+                $apiKey = $decoded['open_api_key'];
+            } elseif (isset($decoded['gemini_api_key'])) {
+                $apiKey = $decoded['gemini_api_key'];
+            }
+        }
+        
+        // Remove quotes if present
+        $apiKey = trim($apiKey, '"\'');
+        
+        // Validate OpenAI key format (should start with sk-)
+        if (strpos($apiKey, 'sk-') === 0) {
+            return $apiKey;
+        }
+        
+        // Validate Gemini key format (should be a long string)
+        if (strlen($apiKey) > 20 && !strpos($apiKey, 'sk-')) {
+            return $apiKey;
+        }
+        
+        Log::warning("Invalid API key format detected: " . substr($apiKey, 0, 20) . "...");
+        return null;
+    }
+
+    private function buildAdditionalQuestionsPrompt($description, $questionCount)
+    {
+        return "Create exactly {$questionCount} additional multiple choice questions based on: {$description}
+
+REQUIREMENTS:
+- Generate EXACTLY {$questionCount} questions
+- Each question must have exactly 4 options (A, B, C, D)
+- Mark the correct answer clearly
+- Questions should be relevant and educational
+- Make sure questions are different from existing ones
+- Use this exact format:
+
+Question 1: [Your question here?]
+A) [Option 1]
+B) [Option 2] 
+C) [Option 3]
+D) [Option 4]
+Correct Answer: [A/B/C/D]
+
+Question 2: [Your question here?]
+A) [Option 1]
+B) [Option 2]
+C) [Option 3] 
+D) [Option 4]
+Correct Answer: [A/B/C/D]
+
+Continue this pattern for all {$questionCount} questions.";
+    }
+
+    private function generateWithOpenAI($prompt, $apiKey)
+    {
+        $client = new \GuzzleHttp\Client();
+        
+        $response = $client->post('https://api.openai.com/v1/chat/completions', [
+            'headers' => [
+                'Authorization' => 'Bearer ' . $apiKey,
+                'Content-Type' => 'application/json',
+            ],
+            'json' => [
+                'model' => 'gpt-3.5-turbo',
+                'messages' => [
+                    ['role' => 'user', 'content' => $prompt]
+                ],
+                'max_tokens' => 2000,
+                'temperature' => 0.7,
+            ],
+            'timeout' => 90
+        ]);
+
+        $data = json_decode($response->getBody(), true);
+        return $data['choices'][0]['message']['content'] ?? null;
+    }
+
+    private function generateWithGemini($prompt, $apiKey)
+    {
+        $client = new \GuzzleHttp\Client();
+        
+        $response = $client->post("https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={$apiKey}", [
+            'headers' => [
+                'Content-Type' => 'application/json',
+            ],
+            'json' => [
+                'contents' => [
+                    ['parts' => [['text' => $prompt]]]
+                ],
+                'generationConfig' => [
+                    'maxOutputTokens' => 2000,
+                    'temperature' => 0.7,
+                ]
+            ],
+            'timeout' => 90
+        ]);
+
+        $data = json_decode($response->getBody(), true);
+        return $data['candidates'][0]['content']['parts'][0]['text'] ?? null;
+    }
+
+    private function createAdditionalQuestions($quiz, $aiResponse)
+    {
+        Log::info("Parsing AI response for additional questions");
+        
+        $lines = explode("\n", $aiResponse);
+        $currentQuestion = null;
+        $currentOptions = [];
+        $correctAnswer = null;
+        $questionCount = 0;
+
+        Log::info("AI response has " . count($lines) . " lines");
+
+        foreach ($lines as $lineNum => $line) {
+            $line = trim($line);
+            
+            // Skip empty lines
+            if (empty($line)) continue;
+            
+            // Check for question pattern
+            if (preg_match('/^Question \d+:/i', $line)) {
+                // Save previous question if exists
+                if ($currentQuestion && count($currentOptions) >= 4) {
+                    $this->saveAdditionalQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
+                    $questionCount++;
+                    Log::info("Saved additional question {$questionCount}: " . substr($currentQuestion, 0, 50) . "...");
+                }
+                
+                // Start new question
+                $currentQuestion = preg_replace('/^Question \d+:\s*/i', '', $line);
+                $currentOptions = [];
+                $correctAnswer = null;
+            } 
+            // Check for option pattern
+            elseif (preg_match('/^[A-D]\)\s*(.+)$/i', $line, $matches)) {
+                $currentOptions[] = $matches[1];
+            } 
+            // Check for correct answer pattern
+            elseif (preg_match('/^Correct Answer:\s*([A-D])/i', $line, $matches)) {
+                $correctAnswer = $matches[1];
+            }
+        }
+
+        // Save last question
+        if ($currentQuestion && count($currentOptions) >= 4) {
+            $this->saveAdditionalQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
+            $questionCount++;
+            Log::info("Saved final additional question {$questionCount}: " . substr($currentQuestion, 0, 50) . "...");
+        }
+
+        Log::info("Successfully parsed {$questionCount} additional questions from AI response");
+        return $questionCount;
+    }
+
+    private function saveAdditionalQuestion($quiz, $questionText, $options, $correctAnswer)
+    {
+        $question = $quiz->questions()->create([
+            'title' => $questionText,
+            'type' => 0, // Multiple choice
+        ]);
+
+        $optionLetters = ['A', 'B', 'C', 'D'];
+        
+        foreach ($options as $index => $option) {
+            $isCorrect = false;
+            
+            // Check if this option matches the correct answer
+            if ($correctAnswer && isset($optionLetters[$index]) && $optionLetters[$index] === strtoupper(trim($correctAnswer))) {
+                $isCorrect = true;
+            }
+
+            $question->answers()->create([
+                'title' => $option,
+                'is_correct' => $isCorrect,
+            ]);
+            
+            Log::info("Created additional answer option " . ($index + 1) . ": " . substr($option, 0, 30) . "... (Correct: " . ($isCorrect ? 'Yes' : 'No') . ")");
+        }
+        
+        Log::info("Additional question saved: " . substr($questionText, 0, 50) . "... with " . count($options) . " options");
     }
 }
