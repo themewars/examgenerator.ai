@@ -112,6 +112,7 @@ class CreateQuizzes extends CreateRecord
             $readability->parse($response);
             $readability->getContent();
             $description = $readability->getExcerpt();
+            $input['quiz_description'] = $description;
 
             // Enforce website token cap per plan
             $plan = app(\App\Services\PlanValidationService::class)->getUsageSummary();
@@ -133,8 +134,8 @@ class CreateQuizzes extends CreateRecord
         }
 
         // Handle file uploads
-        if (isset($this->data['file_upload']) && is_array($this->data['file_upload'])) {
-            foreach ($this->data['file_upload'] as $file) {
+        if (isset($data['file_upload']) && is_array($data['file_upload'])) {
+            foreach ($data['file_upload'] as $file) {
                 if ($file instanceof \Illuminate\Http\UploadedFile) {
                     $filePath = $file->store('temp-file', 'public');
                     $fileUrl = Storage::disk('public')->url($filePath);
@@ -142,6 +143,7 @@ class CreateQuizzes extends CreateRecord
 
                     if ($extension === 'pdf') {
                         $description = pdfToText($fileUrl);
+                        $input['quiz_description'] = $description;
                         $pages = substr_count($description, "\f");
                         $pages = $pages > 0 ? $pages : null;
                         $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
@@ -160,6 +162,7 @@ class CreateQuizzes extends CreateRecord
                         $input['type'] = Quiz::UPLOAD_TYPE;
                     } elseif ($extension === 'docx') {
                         $description = docxToText($fileUrl);
+                        $input['quiz_description'] = $description;
                         $input['type'] = Quiz::UPLOAD_TYPE;
                     }
                 }
@@ -167,20 +170,21 @@ class CreateQuizzes extends CreateRecord
         }
 
         // Handle image uploads
-        if (isset($this->data['image_upload']) && is_array($this->data['image_upload'])) {
+        if (isset($data['image_upload']) && is_array($data['image_upload'])) {
             $imageProcessingService = new ImageProcessingService();
             $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
             $maxImages = $userPlan?->max_images_allowed;
-            if ($maxImages && $maxImages > 0 && count($this->data['image_upload']) > $maxImages) {
+            if ($maxImages && $maxImages > 0 && count($data['image_upload']) > $maxImages) {
                 Notification::make()->danger()->title(__('Your file exceeds the allowed limit for this plan. Please upgrade to continue.'))->send();
                 $this->halt();
             }
-            foreach ($this->data['image_upload'] as $file) {
+            foreach ($data['image_upload'] as $file) {
                 if ($file instanceof \Illuminate\Http\UploadedFile) {
                     if ($imageProcessingService->validateImageFile($file)) {
                         $extractedText = $imageProcessingService->processUploadedImage($file);
                         if ($extractedText) {
                             $description = $extractedText;
+                            $input['quiz_description'] = $description;
                             $input['type'] = Quiz::IMAGE_TYPE;
                             if ($userPlan && $userPlan->max_website_tokens_allowed) {
                                 $estimated = \App\Services\TokenEstimator::estimateTokens($description ?? '');
@@ -199,6 +203,7 @@ class CreateQuizzes extends CreateRecord
 
         if (strlen($description) > 10000) {
             $description = substr($description, 0, 10000).'...';
+            $input['quiz_description'] = $description;
         }
 
         $totalQuestions = (int) $data['max_questions'];
