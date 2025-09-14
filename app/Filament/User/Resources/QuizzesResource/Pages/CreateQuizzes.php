@@ -64,6 +64,11 @@ class CreateQuizzes extends CreateRecord
                 $description = $data['quiz_description_url'];
             }
 
+            // Remove form fields that don't exist in database
+            unset($data['quiz_description_text']);
+            unset($data['quiz_description_sub']);
+            unset($data['quiz_description_url']);
+
             // Set required fields
             $data['user_id'] = $userId;
             $data['quiz_description'] = $description;
