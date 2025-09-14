@@ -383,13 +383,12 @@ class CreateQuizzes extends CreateRecord
         }
 
         $prompt = <<<PROMPT
-You MUST generate EXACTLY {$data['max_questions']} questions. This is CRITICAL.
+Generate EXACTLY {$data['max_questions']} {$quizData['question_type']} questions.
 
-Quiz: {$data['title']}
+Title: {$data['title']}
 Subject: {$description}
 Difficulty: {$quizData['Difficulty']}
 Language: {$data['language']}
-Question Type: {$quizData['question_type']}
 
 Format:
 {$formatInstructions}
@@ -397,16 +396,9 @@ Format:
 Guidelines:
 {$guidelines}
 
-MANDATORY REQUIREMENTS:
-1. Generate EXACTLY {$data['max_questions']} questions - NO MORE, NO LESS
-2. Count your questions before responding
-3. If you have fewer than {$data['max_questions']}, generate more
-4. If you have more than {$data['max_questions']}, remove the excess
-5. Return ONLY the JSON array with exactly {$data['max_questions']} question objects
+CRITICAL: Generate EXACTLY {$data['max_questions']} questions. Count them before responding.
 
-VERIFICATION: Your response must contain exactly {$data['max_questions']} question objects in the JSON array.
-
-Return ONLY JSON array with {$data['max_questions']} question objects. No explanations, no additional text.
+Return ONLY JSON array with {$data['max_questions']} question objects. No explanations.
 PROMPT;
 
         $aiType = getSetting()->ai_type;
@@ -533,78 +525,55 @@ PROMPT;
                 $this->halt();
             }
 
-            // Smart retry mechanism for exact question count
-            $maxRetries = 3;
-            $quizQuestions = [];
-            $quizText = null;
+            // Optimized single attempt with Cloudflare-compatible timeout
+            \Log::info("Generating {$totalQuestions} questions with optimized timeout");
             
-            for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
-                \Log::info("Attempt {$attempt}: Generating {$totalQuestions} questions");
-                
-                // Add emphasis for retries
-                $currentPrompt = $prompt;
-                if ($attempt > 1) {
-                    $currentPrompt .= "\n\n🚨 RETRY ATTEMPT {$attempt}: You previously failed to generate exactly {$totalQuestions} questions. You MUST generate EXACTLY {$totalQuestions} questions this time. Count them carefully!";
-                }
-                
-                $quizResponse = Http::withToken($openAiKey)
-                    ->withHeaders([
-                        'Content-Type' => 'application/json',
-                    ])
-                    ->timeout(120)
-                    ->retry(2, 1000)
-                    ->post('https://api.openai.com/v1/chat/completions', [
-                        'model' => $model,
-                        'messages' => [
-                            [
-                                'role' => 'user',
-                                'content' => $currentPrompt,
-                            ],
+            $quizResponse = Http::withToken($openAiKey)
+                ->withHeaders([
+                    'Content-Type' => 'application/json',
+                ])
+                ->timeout(90) // Reduced timeout to prevent Cloudflare timeout
+                ->retry(1, 500) // Minimal retries
+                ->post('https://api.openai.com/v1/chat/completions', [
+                    'model' => $model,
+                    'messages' => [
+                        [
+                            'role' => 'user',
+                            'content' => $prompt,
                         ],
-                    ]);
+                    ],
+                ]);
 
-                if ($quizResponse->failed()) {
-                    $error = $quizResponse->json()['error']['message'] ?? 'Unknown error occurred';
-                    Notification::make()->danger()->title(__('OpenAI Error'))->body($error)->send();
-                    $this->halt();
+            if ($quizResponse->failed()) {
+                $error = $quizResponse->json()['error']['message'] ?? 'Unknown error occurred';
+                Notification::make()->danger()->title(__('OpenAI Error'))->body($error)->send();
+                $this->halt();
+            }
+
+            $quizText = $quizResponse['choices'][0]['message']['content'] ?? null;
+            $quizQuestions = [];
+            
+            if ($quizText) {
+                $quizData = trim($quizText);
+                if (stripos($quizData, '```json') === 0) {
+                    $quizData = preg_replace('/^```json\s*|\s*```$/', '', $quizData);
+                    $quizData = trim($quizData);
                 }
-
-                $quizText = $quizResponse['choices'][0]['message']['content'] ?? null;
                 
-                if ($quizText) {
-                    $quizData = trim($quizText);
-                    if (stripos($quizData, '```json') === 0) {
-                        $quizData = preg_replace('/^```json\s*|\s*```$/', '', $quizData);
-                        $quizData = trim($quizData);
-                    }
-                    
-                    $quizQuestions = json_decode($quizData, true);
-                    
-                    if (is_array($quizQuestions) && count($quizQuestions) == $totalQuestions) {
-                        \Log::info("SUCCESS: Generated exactly {$totalQuestions} questions on attempt {$attempt}");
-                        break;
-                    } else {
-                        $actualCount = is_array($quizQuestions) ? count($quizQuestions) : 0;
-                        \Log::warning("Attempt {$attempt}: Generated {$actualCount} questions instead of {$totalQuestions}");
-                        
-                        if ($attempt == $maxRetries) {
-                            \Log::error("FAILED: Could not generate exactly {$totalQuestions} questions after {$maxRetries} attempts");
-                        }
-                    }
-                }
+                $quizQuestions = json_decode($quizData, true);
             }
 
             if ($quizText) {
                 // Final validation - check if we got the exact number of questions
                 $generatedCount = count($quizQuestions);
                 if ($generatedCount != $totalQuestions) {
-                    \Log::warning("FINAL RESULT: Generated {$generatedCount} questions instead of {$totalQuestions} requested after {$maxRetries} attempts");
+                    \Log::warning("Generated {$generatedCount} questions instead of {$totalQuestions} requested");
                     
                     if ($generatedCount < $totalQuestions) {
                         Notification::make()
                             ->warning()
                             ->title(__('Partial Quiz Generated'))
-                            ->body(__('AI generated :count questions instead of :total requested after multiple attempts. You can add more questions manually.', [
+                            ->body(__('AI generated :count questions instead of :total requested. You can add more questions manually.', [
                                 'count' => $generatedCount,
                                 'total' => $totalQuestions
                             ]))
