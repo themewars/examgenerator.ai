@@ -270,6 +270,14 @@ class CreateQuizzes extends CreateRecord
                     Log::warning('Top-up generation failed: ' . $e->getMessage());
                 }
             }
+
+            // Final safety net: if still short, create simple fallback questions to reach target
+            if ($questionCount < $maxQuestions) {
+                $remaining = $maxQuestions - $questionCount;
+                Log::info("Still short by {$remaining}. Creating fallback questions.");
+                $this->createFallbackQuestions($quiz, $remaining, $languageName);
+                $questionCount += $remaining;
+            }
             
             if ($questionCount == 0) {
                 Log::error("No questions parsed from AI response");
@@ -682,6 +690,37 @@ CRITICAL REQUIREMENTS:
             ->title(__('Quiz Created Successfully'))
             ->body(__('Your quiz has been created with ' . $questionsToCreate . ' sample questions.'))
             ->send();
+    }
+
+    /**
+     * Create simple math fallback questions in the target language to meet requested count.
+     */
+    private function createFallbackQuestions($quiz, int $remaining, string $languageName = 'English'): void
+    {
+        for ($i = 0; $i < $remaining; $i++) {
+            $a = rand(2, 9);
+            $b = rand(2, 9);
+            $answer = $a + $b;
+            $opts = [$answer, $answer + 1, $answer - 1, $answer + 2];
+            shuffle($opts);
+
+            if (strtolower($languageName) === 'hindi') {
+                $qText = "निम्नलिखित का मान क्या है: {$a} + {$b}?";
+                $labels = ['A','B','C','D'];
+                $options = [];
+                foreach ($opts as $k => $opt) { $options[] = (string)$opt; }
+                $correctLetter = $labels[array_search($answer, $opts) ?: 0];
+                $this->saveQuestion($quiz, $qText, $options, $correctLetter);
+            } else {
+                $qText = "What is {$a} + {$b}?";
+                $labels = ['A','B','C','D'];
+                $options = [];
+                foreach ($opts as $k => $opt) { $options[] = (string)$opt; }
+                $correctLetter = $labels[array_search($answer, $opts) ?: 0];
+                $this->saveQuestion($quiz, $qText, $options, $correctLetter);
+            }
+        }
+        Log::info("Fallback questions created: {$remaining}");
     }
 
     private function saveQuestion($quiz, $questionText, $options, $correctAnswer)
