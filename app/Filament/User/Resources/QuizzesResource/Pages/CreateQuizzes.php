@@ -148,24 +148,21 @@ class CreateQuizzes extends CreateRecord
             Log::info("Quiz data validated successfully");
 
             // Enforce plan limit for monthly exams BEFORE creating the record
-            try {
-                $planValidation = (new PlanValidationService(Auth::user()))->canCreateExam();
-                if (isset($planValidation['allowed']) && $planValidation['allowed'] === false) {
-                    $limit = $planValidation['limit'] ?? 0;
-                    $used = $planValidation['used'] ?? 0;
-                    $remaining = $planValidation['remaining'] ?? 0;
-                    $message = $planValidation['message'] ?? 'Plan limit reached';
+            $planValidation = (new PlanValidationService(Auth::user()))->canCreateExam();
+            if (($planValidation['allowed'] ?? true) === false) {
+                $limit = $planValidation['limit'] ?? 0;
+                $used = $planValidation['used'] ?? 0;
+                $remaining = $planValidation['remaining'] ?? 0;
+                $message = $planValidation['message'] ?? 'Plan limit reached';
 
-                    Notification::make()
-                        ->danger()
-                        ->title('Plan limit reached')
-                        ->body($message . ". Limit: {$limit}, Used: {$used}, Remaining: {$remaining}.")
-                        ->send();
+                Notification::make()
+                    ->danger()
+                    ->title('Plan limit reached')
+                    ->body($message . ". Limit: {$limit}, Used: {$used}, Remaining: {$remaining}.")
+                    ->send();
 
-                    $this->halt();
-                }
-            } catch (\Throwable $e) {
-                Log::warning('Plan validation check failed: ' . $e->getMessage());
+                // Stop the create action gracefully (do not proceed to DB write)
+                $this->halt();
             }
 
             // Create quiz record
