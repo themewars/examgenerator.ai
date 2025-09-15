@@ -568,7 +568,8 @@ CRITICAL REQUIREMENTS:
             if (empty($line)) continue;
             
             // Check for question pattern (supports English/Hinglish/Hindi markers)
-            if (preg_match('/^(Question|Q|प्रश्न)\s*\d+\s*[:\.)-]/iu', $line)) {
+            // Allow optional language tag between number and colon, e.g., "Question 1 (Hindi):"
+            if (preg_match('/^(Question|Q|प्रश्न)\s*\d+(?:\s*\([^)]*\))?\s*[:\.)-]/iu', $line)) {
                 // Save previous question if exists
                 if ($currentQuestion && count($currentOptions) >= 4) {
                     $this->saveQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
@@ -576,8 +577,8 @@ CRITICAL REQUIREMENTS:
                     Log::info("Saved question {$questionCount}: " . substr($currentQuestion, 0, 50) . "...");
                 }
                 
-                // Start new question
-                $currentQuestion = preg_replace('/^(Question|Q|प्रश्न)\s*\d+[:\.]\s*/iu', '', $line);
+                // Start new question: strip marker, number and optional language tag
+                $currentQuestion = preg_replace('/^(Question|Q|प्रश्न)\s*\d+(?:\s*\([^)]*\))?\s*[:\.]\s*/iu', '', $line);
                 $currentOptions = [];
                 $correctAnswer = null;
             } 
