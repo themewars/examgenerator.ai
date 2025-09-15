@@ -79,8 +79,15 @@ class CreateQuizzes extends CreateRecord
     protected function handleRecordCreation(array $data): Model
     {
         try {
-        $userId = Auth::id();
+            Log::info("Starting quiz creation with data: " . json_encode(array_keys($data)));
+            
+            $userId = Auth::id();
+            if (!$userId) {
+                throw new \Exception('User not authenticated');
+            }
+            
             $activeTab = $this->getActiveTab();
+            Log::info("Active tab determined: " . $activeTab);
 
             // Handle description from different sources
             $description = '';
@@ -109,25 +116,35 @@ class CreateQuizzes extends CreateRecord
             
             // Ensure required fields are present
             if (empty($data['title'])) {
+                Log::error("Quiz title is missing");
                 throw new \Exception('Quiz title is required');
             }
             if (empty($data['category_id'])) {
+                Log::error("Quiz category is missing");
                 throw new \Exception('Quiz category is required');
             }
             if (empty($data['max_questions']) || $data['max_questions'] < 1) {
+                Log::warning("Max questions not set, using default: 10");
                 $data['max_questions'] = 10; // Default fallback
             }
+            
+            Log::info("Quiz data validated successfully");
 
             // Create quiz record
+            Log::info("Creating quiz record with data: " . json_encode($data));
             $quiz = Quiz::create($data);
+            Log::info("Quiz created successfully with ID: " . $quiz->id);
 
             // Generate real questions using AI
+            Log::info("Starting AI question generation");
             $this->generateRealQuestions($quiz, $description, $data['max_questions'] ?? 10);
 
+            Log::info("Quiz creation completed successfully");
             return $quiz;
 
         } catch (\Exception $e) {
             Log::error("Quiz creation error: " . $e->getMessage());
+            Log::error("Stack trace: " . $e->getTraceAsString());
             
             Notification::make()
                 ->danger()
