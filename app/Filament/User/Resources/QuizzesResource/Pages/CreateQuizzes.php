@@ -48,11 +48,39 @@ class CreateQuizzes extends CreateRecord
         return $tabType[$tab] ?? Quiz::TEXT_TYPE;
     }
 
+    private function getActiveTab()
+    {
+        try {
+            // Try to get from URL first
+            $pre = URL::previous();
+            if ($pre) {
+                parse_str(parse_url($pre)['query'] ?? '', $queryParams);
+                $tab = $queryParams['tab'] ?? null;
+                $tabType = [
+                    '-subject-tab' => Quiz::SUBJECT_TYPE,
+                    '-text-tab' => Quiz::TEXT_TYPE,
+                    '-url-tab' => Quiz::URL_TYPE,
+                    '-upload-tab' => Quiz::UPLOAD_TYPE,
+                    '-image-tab' => Quiz::IMAGE_TYPE,
+                ];
+                
+                if (isset($tabType[$tab])) {
+                    return $tabType[$tab];
+                }
+            }
+        } catch (\Exception $e) {
+            Log::warning("Failed to get tab from URL: " . $e->getMessage());
+        }
+        
+        // Fallback to default
+        return Quiz::TEXT_TYPE;
+    }
+
     protected function handleRecordCreation(array $data): Model
     {
         try {
         $userId = Auth::id();
-            $activeTab = getTabType();
+            $activeTab = $this->getActiveTab();
 
             // Handle description from different sources
             $description = '';
@@ -78,6 +106,17 @@ class CreateQuizzes extends CreateRecord
             $data['generation_status'] = 'processing';
             $data['generation_progress_total'] = $data['max_questions'] ?? 10;
             $data['generation_progress_done'] = 0;
+            
+            // Ensure required fields are present
+            if (empty($data['title'])) {
+                throw new \Exception('Quiz title is required');
+            }
+            if (empty($data['category_id'])) {
+                throw new \Exception('Quiz category is required');
+            }
+            if (empty($data['max_questions']) || $data['max_questions'] < 1) {
+                $data['max_questions'] = 10; // Default fallback
+            }
 
             // Create quiz record
             $quiz = Quiz::create($data);
