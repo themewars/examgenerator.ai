@@ -601,10 +601,10 @@ class EditQuizzes extends EditRecord
             // Get quiz description for context
             $description = $quiz->quiz_description ?? 'General knowledge questions';
             
-            // Determine target language from quiz and build language-aware prompt
+            // Determine target language and type from quiz and build language-aware prompt
             $languageCode = $quiz->language ?? 'en';
             $languageName = getAllLanguages()[$languageCode] ?? 'English';
-            $prompt = $this->buildAdditionalQuestionsPrompt($description, $questionCount, $languageName);
+            $prompt = $this->buildAdditionalQuestionsPrompt($description, $questionCount, $languageName, $quiz->quiz_type);
             
             Log::info("Generated prompt for additional questions: " . strlen($prompt) . " characters");
             
@@ -707,11 +707,40 @@ class EditQuizzes extends EditRecord
         return null;
     }
 
-    private function buildAdditionalQuestionsPrompt($description, $questionCount, $languageName = 'English')
+    private function buildAdditionalQuestionsPrompt($description, $questionCount, $languageName = 'English', $quizType = null)
     {
         $markerRule = $languageName !== 'English'
             ? "IMPORTANT: Keep these markers EXACTLY in English (do not translate): 'Question', 'A)', 'B)', 'C)', 'D)', 'Correct Answer:'. Only translate the question text and options into {$languageName}."
             : '';
+        $isTrueFalse = ($quizType === \App\Models\Quiz::TRUE_FALSE);
+
+        if ($isTrueFalse) {
+            $true = ($languageName === 'Hindi') ? 'सही' : 'True';
+            $false = ($languageName === 'Hindi') ? 'गलत' : 'False';
+            return "Create exactly {$questionCount} additional TRUE/FALSE questions in {$languageName} based on: {$description}
+
+REQUIREMENTS:
+- Generate EXACTLY {$questionCount} questions in {$languageName}
+- Each question must have exactly 2 options: A) {$true} and B) {$false}
+- Mark the correct answer clearly in {$languageName}
+- Questions should be relevant and educational
+- Make sure questions are different from existing ones
+- Use this exact format:
+
+{$markerRule}
+
+Question 1 ({$languageName}): [Your question here?]
+A) {$true}
+B) {$false}
+Correct Answer: [A/B/C/D]
+
+Question 2 ({$languageName}): [Your question here?]
+A) {$true}
+B) {$false}
+Correct Answer: [A/B/C/D]
+
+Continue this pattern for all {$questionCount} questions.";
+        }
 
         return "Create exactly {$questionCount} additional multiple choice questions in {$languageName} based on: {$description}
 
@@ -799,6 +828,7 @@ Continue this pattern for all {$questionCount} questions.";
         $currentOptions = [];
         $correctAnswer = null;
         $questionCount = 0;
+        $requiredOptions = ($quiz->quiz_type === \App\Models\Quiz::TRUE_FALSE) ? 2 : 4;
 
         Log::info("AI response has " . count($lines) . " lines");
 
@@ -811,7 +841,7 @@ Continue this pattern for all {$questionCount} questions.";
             // Check for question pattern (allow optional language tag)
             if (preg_match('/^(Question|Q|प्रश्न)\s*\d+(?:\s*\([^)]*\))?\s*[:\.)-]/iu', $line)) {
                 // Save previous question if exists
-                if ($currentQuestion && count($currentOptions) >= 4) {
+                if ($currentQuestion && count($currentOptions) >= ($requiredOptions === 2 ? 2 : 4-1)) {
                     $this->saveAdditionalQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
                     $questionCount++;
                     Log::info("Saved additional question {$questionCount}: " . substr($currentQuestion, 0, 50) . "...");
@@ -832,7 +862,7 @@ Continue this pattern for all {$questionCount} questions.";
             // Check for correct answer pattern
             elseif (preg_match('/^(Correct Answer|Correct|Correct Option|Answer|सही उत्तर)\s*[:：]\s*([A-D])/iu', $line, $matches)) {
                 $correctAnswer = $matches[2] ?? $matches[1];
-                if ($currentQuestion && count($currentOptions) >= 2) {
+                if ($currentQuestion && count($currentOptions) >= ($requiredOptions === 2 ? 2 : 2)) {
                     $this->saveAdditionalQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
                     $questionCount++;
                     $currentQuestion = null;
@@ -843,7 +873,7 @@ Continue this pattern for all {$questionCount} questions.";
         }
 
         // Save last question
-        if ($currentQuestion && count($currentOptions) >= 3) {
+        if ($currentQuestion && count($currentOptions) >= ($requiredOptions === 2 ? 2 : 3)) {
             $this->saveAdditionalQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
             $questionCount++;
             Log::info("Saved final additional question {$questionCount}: " . substr($currentQuestion, 0, 50) . "...");
