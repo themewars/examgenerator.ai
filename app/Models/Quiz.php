@@ -539,13 +539,17 @@ class Quiz extends Model implements HasMedia
                 ->reorderableWithDragAndDrop(true)
                 ->addActionLabel('Add New Question Manual')
                 ->hidden(fn(string $operation): bool => $operation === 'create')
-                ->addable(function () {
+                ->addable(function ($record) {
+                    if (!$record) {
+                        return true; // Allow adding during creation
+                    }
+                    
                     $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
                     $maxQuestions = $userPlan?->max_questions_per_exam ?? 20;
                     if ($maxQuestions == -1) {
                         $maxQuestions = 20; // Still limit to 20 for API safety
                     }
-                    $currentQuestions = $this->questions()->count();
+                    $currentQuestions = $record->questions()->count();
                     $remainingQuestions = min($maxQuestions, 20) - $currentQuestions;
                     return $remainingQuestions > 0;
                 })
