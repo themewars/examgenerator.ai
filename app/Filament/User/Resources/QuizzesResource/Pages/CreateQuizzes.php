@@ -216,8 +216,12 @@ class CreateQuizzes extends CreateRecord
                 return;
             }
 
-            // Build optimized prompt
-            $prompt = $this->buildOptimizedPrompt($description, $maxQuestions);
+            // Determine target language name from quiz record
+            $languageCode = $quiz->language ?? 'en';
+            $languageName = getAllLanguages()[$languageCode] ?? 'English';
+
+            // Build optimized prompt with language instruction
+            $prompt = $this->buildOptimizedPrompt($description, $maxQuestions, $languageName);
             Log::info("Generated prompt length: " . strlen($prompt));
             
             // Try OpenAI first, then Gemini
@@ -300,7 +304,9 @@ class CreateQuizzes extends CreateRecord
             }
 
             // Build prompt
-            $prompt = $this->buildPrompt($description, $maxQuestions);
+            $languageCode = $quiz->language ?? 'en';
+            $languageName = getAllLanguages()[$languageCode] ?? 'English';
+            $prompt = $this->buildPrompt($description, $maxQuestions, $languageName);
             Log::info("Generated prompt length: " . strlen($prompt));
             
             // Generate with OpenAI or Gemini
@@ -390,42 +396,42 @@ class CreateQuizzes extends CreateRecord
         return null;
     }
 
-    private function buildOptimizedPrompt($description, $maxQuestions)
+    private function buildOptimizedPrompt($description, $maxQuestions, $languageName = 'English')
     {
-        return "Create exactly {$maxQuestions} multiple choice questions based on: {$description}
+        return "Create exactly {$maxQuestions} multiple choice questions in {$languageName} based on: {$description}
 
 REQUIREMENTS:
-- Generate EXACTLY {$maxQuestions} questions
+- Generate EXACTLY {$maxQuestions} questions in {$languageName}
 - Each question must have exactly 4 options (A, B, C, D)
-- Mark the correct answer clearly
+- Mark the correct answer clearly using {$languageName}
 - Questions should be relevant and educational
 - Use this exact format:
 
-Question 1: [Your question here?]
-A) [Option 1]
-B) [Option 2] 
-C) [Option 3]
-D) [Option 4]
+Question 1 ({$languageName}): [Your question here?]
+A) [Option 1 in {$languageName}]
+B) [Option 2 in {$languageName}] 
+C) [Option 3 in {$languageName}]
+D) [Option 4 in {$languageName}]
 Correct Answer: [A/B/C/D]
 
-Question 2: [Your question here?]
-A) [Option 1]
-B) [Option 2]
-C) [Option 3] 
-D) [Option 4]
+Question 2 ({$languageName}): [Your question here?]
+A) [Option 1 in {$languageName}]
+B) [Option 2 in {$languageName}]
+C) [Option 3 in {$languageName}] 
+D) [Option 4 in {$languageName}]
 Correct Answer: [A/B/C/D]
 
 Continue this pattern for all {$maxQuestions} questions.";
     }
 
-    private function buildPrompt($description, $maxQuestions)
+    private function buildPrompt($description, $maxQuestions, $languageName = 'English')
     {
-        return "Generate exactly {$maxQuestions} multiple choice questions based on this content: {$description}. 
+        return "Generate exactly {$maxQuestions} multiple choice questions in {$languageName} based on this content: {$description}. 
 
 CRITICAL REQUIREMENTS:
-- Generate EXACTLY {$maxQuestions} questions
-- Each question must have 4 answer options
-- Mark the correct answer clearly
+- Generate EXACTLY {$maxQuestions} questions in {$languageName}
+- Each question must have 4 answer options in {$languageName}
+- Mark the correct answer clearly in {$languageName}
 - Questions should be relevant to the content
 - Format: Question: [question text] Options: A) [option1] B) [option2] C) [option3] D) [option4] Correct: [correct option]";
     }
