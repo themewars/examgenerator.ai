@@ -55,6 +55,7 @@ class Quiz extends Model implements HasMedia
         'generation_progress_total',
         'generation_progress_done',
         'generation_error',
+        'language',
     ];
 
     protected $casts = [

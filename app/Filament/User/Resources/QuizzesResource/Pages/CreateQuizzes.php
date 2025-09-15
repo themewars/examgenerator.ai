@@ -80,14 +80,26 @@ class CreateQuizzes extends CreateRecord
     {
         try {
             Log::info("Starting quiz creation with data: " . json_encode(array_keys($data)));
+            Log::info("Full data: " . json_encode($data));
             
             $userId = Auth::id();
             if (!$userId) {
+                Log::error("User not authenticated");
                 throw new \Exception('User not authenticated');
             }
             
             $activeTab = $this->getActiveTab();
             Log::info("Active tab determined: " . $activeTab);
+            
+            // Validate required fields early
+            if (empty($data['title'])) {
+                Log::error("Title is missing in form data");
+                throw new \Exception('Quiz title is required');
+            }
+            if (empty($data['category_id'])) {
+                Log::error("Category is missing in form data");
+                throw new \Exception('Quiz category is required');
+            }
 
             // Handle description from different sources
             $description = '';
@@ -114,18 +126,22 @@ class CreateQuizzes extends CreateRecord
             $data['generation_progress_total'] = $data['max_questions'] ?? 10;
             $data['generation_progress_done'] = 0;
             
-            // Ensure required fields are present
-            if (empty($data['title'])) {
-                Log::error("Quiz title is missing");
-                throw new \Exception('Quiz title is required');
-            }
-            if (empty($data['category_id'])) {
-                Log::error("Quiz category is missing");
-                throw new \Exception('Quiz category is required');
-            }
+            // Set default values for missing fields
             if (empty($data['max_questions']) || $data['max_questions'] < 1) {
                 Log::warning("Max questions not set, using default: 10");
                 $data['max_questions'] = 10; // Default fallback
+            }
+            if (empty($data['diff_level'])) {
+                Log::warning("Difficulty level not set, using default: 0");
+                $data['diff_level'] = 0; // Default to Basic
+            }
+            if (empty($data['quiz_type'])) {
+                Log::warning("Quiz type not set, using default: 0");
+                $data['quiz_type'] = 0; // Default to Multiple Choice
+            }
+            if (empty($data['language'])) {
+                Log::warning("Language not set, using default: en");
+                $data['language'] = 'en'; // Default to English
             }
             
             Log::info("Quiz data validated successfully");
