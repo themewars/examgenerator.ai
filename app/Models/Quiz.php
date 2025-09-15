@@ -291,9 +291,9 @@ class Quiz extends Model implements HasMedia
                                                     $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
                                                     $maxQuestions = $userPlan?->max_questions_per_exam ?? 20;
                                                     if ($maxQuestions == -1) {
-                                                        $maxQuestions = 20; // Still limit to 20 for API safety
+                                                        $maxQuestions = 50; // Safety cap if unlimited
                                                     }
-                                                    return ['integer', 'max:' . min($maxQuestions, 20)];
+                                                    return ['integer', 'max:' . $maxQuestions];
                                                 })
                                                 ->integer()
                                                 ->required()
@@ -302,9 +302,9 @@ class Quiz extends Model implements HasMedia
                                                     $userPlan = auth()->user()?->subscriptions()->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)->orderByDesc('id')->first()?->plan;
                                                     $maxQuestions = $userPlan?->max_questions_per_exam ?? 20;
                                                     if ($maxQuestions == -1) {
-                                                        $maxQuestions = 20; // Still limit to 20 for API safety
+                                                        $maxQuestions = 50; // Safety cap if unlimited
                                                     }
-                                                    return min($maxQuestions, 20);
+                                                    return $maxQuestions;
                                                 })
                                                 ->label(__('messages.quiz.num_of_questions') . ':')
                                                 ->hintIcon('heroicon-m-question-mark-circle', tooltip: 'Maximum 20 questions allowed to prevent API failures')
