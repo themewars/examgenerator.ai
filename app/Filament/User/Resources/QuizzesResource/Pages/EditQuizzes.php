@@ -803,13 +803,13 @@ Continue this pattern for all {$questionCount} questions.";
         Log::info("AI response has " . count($lines) . " lines");
 
         foreach ($lines as $lineNum => $line) {
-            $line = trim($line);
+            $line = $this->normalizeLine(trim($line));
             
             // Skip empty lines
             if (empty($line)) continue;
             
-            // Check for question pattern
-            if (preg_match('/^Question \d+:/i', $line)) {
+            // Check for question pattern (allow optional language tag)
+            if (preg_match('/^(Question|Q|प्रश्न)\s*\d+(?:\s*\([^)]*\))?\s*[:\.)-]/iu', $line)) {
                 // Save previous question if exists
                 if ($currentQuestion && count($currentOptions) >= 4) {
                     $this->saveAdditionalQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
@@ -818,22 +818,32 @@ Continue this pattern for all {$questionCount} questions.";
                 }
                 
                 // Start new question
-                $currentQuestion = preg_replace('/^Question \d+:\s*/i', '', $line);
+                $currentQuestion = preg_replace('/^(Question|Q|प्रश्न)\s*\d+(?:\s*\([^)]*\))?\s*[:\.]\s*/iu', '', $line);
                 $currentOptions = [];
                 $correctAnswer = null;
             } 
-            // Check for option pattern
-            elseif (preg_match('/^[A-D]\)\s*(.+)$/i', $line, $matches)) {
-                $currentOptions[] = $matches[1];
+            // Check for option pattern (A) / A. / A- / A: / A]
+            elseif (preg_match('/^[A-D]\s*[\)\.:\-\]]\s*(.+)$/i', $line, $matches)) {
+                $opt = trim($matches[1]);
+                if ($opt !== '' && count($currentOptions) < 4) {
+                    $currentOptions[] = $opt;
+                }
             } 
             // Check for correct answer pattern
-            elseif (preg_match('/^Correct Answer:\s*([A-D])/i', $line, $matches)) {
-                $correctAnswer = $matches[1];
+            elseif (preg_match('/^(Correct Answer|Correct|Correct Option|Answer|सही उत्तर)\s*[:：]\s*([A-D])/iu', $line, $matches)) {
+                $correctAnswer = $matches[2] ?? $matches[1];
+                if ($currentQuestion && count($currentOptions) >= 2) {
+                    $this->saveAdditionalQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
+                    $questionCount++;
+                    $currentQuestion = null;
+                    $currentOptions = [];
+                    $correctAnswer = null;
+                }
             }
         }
 
         // Save last question
-        if ($currentQuestion && count($currentOptions) >= 4) {
+        if ($currentQuestion && count($currentOptions) >= 3) {
             $this->saveAdditionalQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
             $questionCount++;
             Log::info("Saved final additional question {$questionCount}: " . substr($currentQuestion, 0, 50) . "...");
@@ -845,6 +855,9 @@ Continue this pattern for all {$questionCount} questions.";
 
     private function saveAdditionalQuestion($quiz, $questionText, $options, $correctAnswer)
     {
+        if (count($options) > 4) {
+            $options = array_slice($options, 0, 4);
+        }
         $question = $quiz->questions()->create([
             'title' => $questionText,
             'type' => 0, // Multiple choice
@@ -869,6 +882,20 @@ Continue this pattern for all {$questionCount} questions.";
         }
         
         Log::info("Additional question saved: " . substr($questionText, 0, 50) . "... with " . count($options) . " options");
+    }
+
+    private function normalizeLine(string $line): string
+    {
+        if ($line === '') return $line;
+        $devToAscii = ['०'=>'0','१'=>'1','२'=>'2','३'=>'3','४'=>'4','५'=>'5','६'=>'6','७'=>'7','८'=>'8','९'=>'9'];
+        $line = strtr($line, $devToAscii);
+        $line = str_replace(['：','﹕','ᐟ'], ':', $line);
+        $line = preg_replace('/^\s*(प्रश्न)\s*/u', 'Question ', $line);
+        $line = preg_replace('/^(सही\s*उत्तर)/u', 'Correct Answer', $line);
+        $line = preg_replace('/^\s*\(?([A-Da-d])\)?\s*[:\.-\]]\s*/', strtoupper('$1') . ') ', $line);
+        $line = preg_replace('/^\s*(Q|Que)\.?\s*(\d+)\s*[:\.-]?\s*/i', 'Question $2: ', $line);
+        $line = preg_replace('/^\s*(\d+)\s*[\)\.-]\s*/', 'Question $1: ', $line);
+        return $line;
     }
 
     protected function getFooterWidgets(): array
