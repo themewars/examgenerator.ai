@@ -27,4 +27,37 @@ class Handler extends ExceptionHandler
             //
         });
     }
+
+    /**
+     * Convert an authentication exception into an unauthenticated response.
+     */
+    protected function unauthenticated($request, \Illuminate\Auth\AuthenticationException $exception)
+    {
+        if ($request->expectsJson()) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+
+        // Prefer Filament user panel login if available
+        try {
+            if (class_exists(\Filament\Facades\Filament::class)) {
+                $panel = \Filament\Facades\Filament::getCurrentPanel() ?? \Filament\Facades\Filament::getDefaultPanel();
+                if ($panel) {
+                    $loginRoute = $panel->getLoginRouteName();
+                    if ($loginRoute && \Route::has($loginRoute)) {
+                        return redirect()->guest(route($loginRoute));
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Fallback below if panel detection fails
+        }
+
+        // Fallback to Filament user panel route name if known
+        if (\Route::has('filament.user.auth.login')) {
+            return redirect()->guest(route('filament.user.auth.login'));
+        }
+
+        // Last resort: home page
+        return redirect()->guest(url('/'));
+    }
 }
