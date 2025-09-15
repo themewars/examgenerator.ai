@@ -398,6 +398,10 @@ class CreateQuizzes extends CreateRecord
 
     private function buildOptimizedPrompt($description, $maxQuestions, $languageName = 'English')
     {
+        $markerRule = $languageName !== 'English'
+            ? "IMPORTANT: Keep these markers EXACTLY in English (do not translate): 'Question', 'A)', 'B)', 'C)', 'D)', 'Correct Answer:'. Only translate the question text and options into {$languageName}."
+            : '';
+
         return "Create exactly {$maxQuestions} multiple choice questions in {$languageName} based on: {$description}
 
 REQUIREMENTS:
@@ -406,6 +410,8 @@ REQUIREMENTS:
 - Mark the correct answer clearly using {$languageName}
 - Questions should be relevant and educational
 - Use this exact format:
+
+{$markerRule}
 
 Question 1 ({$languageName}): [Your question here?]
 A) [Option 1 in {$languageName}]
@@ -426,6 +432,10 @@ Continue this pattern for all {$maxQuestions} questions.";
 
     private function buildPrompt($description, $maxQuestions, $languageName = 'English')
     {
+        $markerRule = $languageName !== 'English'
+            ? "IMPORTANT: Keep these markers EXACTLY in English (do not translate): 'Question', 'A)', 'B)', 'C)', 'D)', 'Correct Answer:'. Only translate the question text and options into {$languageName}."
+            : '';
+
         return "Generate exactly {$maxQuestions} multiple choice questions in {$languageName} based on this content: {$description}. 
 
 CRITICAL REQUIREMENTS:
@@ -433,7 +443,8 @@ CRITICAL REQUIREMENTS:
 - Each question must have 4 answer options in {$languageName}
 - Mark the correct answer clearly in {$languageName}
 - Questions should be relevant to the content
-- Format: Question: [question text] Options: A) [option1] B) [option2] C) [option3] D) [option4] Correct: [correct option]";
+- {$markerRule}
+- Format: Question [number]: [question text] A) [option1] B) [option2] C) [option3] D) [option4] Correct Answer: [A/B/C/D]";
     }
 
     private function generateWithOpenAI($prompt, $apiKey)
