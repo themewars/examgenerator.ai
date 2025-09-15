@@ -509,7 +509,7 @@ CRITICAL REQUIREMENTS:
         Log::info("AI response has " . count($lines) . " lines");
 
         foreach ($lines as $lineNum => $line) {
-            $line = trim($line);
+            $line = $this->normalizeLine(trim($line));
             
             // Skip empty lines
             if (empty($line)) continue;
@@ -533,7 +533,7 @@ CRITICAL REQUIREMENTS:
                 $currentOptions[] = $matches[1];
             } 
             // Check for correct answer pattern
-            elseif (preg_match('/^(Correct Answer|Correct|सही उत्तर)\s*[:：]\s*([A-D])/iu', $line, $matches)) {
+            elseif (preg_match('/^(Correct Answer|Correct|Correct Option|Answer|सही उत्तर)\s*[:：]\s*([A-D])/iu', $line, $matches)) {
                 $correctAnswer = $matches[2] ?? $matches[1];
             }
         }
@@ -550,6 +550,37 @@ CRITICAL REQUIREMENTS:
         }
         Log::info("Successfully parsed {$questionCount} questions from AI response");
         return $questionCount;
+    }
+
+    /**
+     * Normalize a single line to improve parser robustness across languages and formats.
+     */
+    private function normalizeLine(string $line): string
+    {
+        if ($line === '') {
+            return $line;
+        }
+
+        // Convert Devanagari digits to ASCII
+        $devToAscii = [
+            '०'=>'0','१'=>'1','२'=>'2','३'=>'3','४'=>'4','५'=>'5','६'=>'6','७'=>'7','८'=>'8','९'=>'9'
+        ];
+        $line = strtr($line, $devToAscii);
+
+        // Standardize markers and punctuation variants
+        $line = str_replace(['：','﹕','ᐟ'], ':', $line); // various colons
+
+        // Map common Hindi markers to English markers to match regex
+        $line = preg_replace('/^\s*(प्रश्न)\s*/u', 'Question ', $line);
+        $line = preg_replace('/^(सही\s*उत्तर)/u', 'Correct Answer', $line);
+
+        // Normalize option markers to A) B) C) D)
+        $line = preg_replace('/^\s*\(?([A-Da-d])\)?\s*[:\.-]\s*/', strtoupper('$1') . ') ', $line);
+
+        // Normalize question marker variants like "Q. 1" -> "Question 1:"
+        $line = preg_replace('/^\s*(Q|Que)\.?\s*(\d+)\s*[:\.-]?\s*/i', 'Question $2: ', $line);
+
+        return $line;
     }
 
     private function createSampleQuestions($quiz, $maxQuestions)
