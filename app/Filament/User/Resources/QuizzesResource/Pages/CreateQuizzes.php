@@ -149,7 +149,37 @@ class CreateQuizzes extends CreateRecord
 
             // Enforce plan limit for monthly exams BEFORE creating the record
             $planValidation = (new PlanValidationService(Auth::user()))->canCreateExam();
-            if (($planValidation['allowed'] ?? true) === false) {
+            $shouldBlock = (($planValidation['allowed'] ?? true) === false);
+
+            // Extra hard guard using direct count within active subscription window
+            if (!$shouldBlock) {
+                try {
+                    $activeSub = Auth::user()?->subscriptions()
+                        ->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)
+                        ->orderByDesc('id')->first();
+                    $plan = $activeSub?->plan;
+                    $limit = $plan?->exams_per_month ?? ($plan?->no_of_exam ?? 0);
+                    if ($limit > 0 && $activeSub?->starts_at && $activeSub?->ends_at) {
+                        $used = \App\Models\Quiz::where('user_id', $userId)
+                            ->whereBetween('created_at', [$activeSub->starts_at, $activeSub->ends_at])
+                            ->count();
+                        if ($used >= $limit) {
+                            $shouldBlock = true;
+                            $planValidation = [
+                                'allowed' => false,
+                                'message' => 'Monthly exam limit reached (' . $limit . ' exams).',
+                                'limit' => $limit,
+                                'used' => $used,
+                                'remaining' => 0,
+                            ];
+                        }
+                    }
+                } catch (\Throwable $e) {
+                    \Log::warning('Fallback plan limit check failed: ' . $e->getMessage());
+                }
+            }
+
+            if ($shouldBlock) {
                 $limit = $planValidation['limit'] ?? 0;
                 $used = $planValidation['used'] ?? 0;
                 $remaining = $planValidation['remaining'] ?? 0;
@@ -161,7 +191,6 @@ class CreateQuizzes extends CreateRecord
                     ->body($message . ". Limit: {$limit}, Used: {$used}, Remaining: {$remaining}.")
                     ->send();
 
-                // Stop the create action gracefully (do not proceed to DB write)
                 $this->halt();
             }
 
@@ -772,15 +801,20 @@ CRITICAL REQUIREMENTS:
 
     protected function getFormActions(): array
     {
-        $canCreateExam = (app(\App\Services\PlanValidationService::class)->canCreateExam()['allowed'] ?? true);
+        $planCheck = app(\App\Services\PlanValidationService::class)->canCreateExam();
+        $canCreateExam = ($planCheck['allowed'] ?? true);
 
         $create = parent::getFormActions()[0]
-            ->label(fn () => $this->getProgressLabel())
+            ->label(fn () => $canCreateExam ? $this->getProgressLabel() : 'Plan limit reached')
+            ->color($canCreateExam ? 'primary' : 'gray')
             ->icon('heroicon-o-plus')
             ->disabled(fn () => $canCreateExam === false)
             ->extraAttributes([
                 'wire:target' => 'create',
                 'wire:loading.attr' => 'disabled',
+                'title' => $canCreateExam ? '' : (
+                    'Monthly exam limit reached (' . ($planCheck['limit'] ?? 0) . '). Used: ' . ($planCheck['used'] ?? 0) . ', Remaining: ' . ($planCheck['remaining'] ?? 0)
+                ),
             ]);
 
         return [$create];
@@ -788,7 +822,8 @@ CRITICAL REQUIREMENTS:
 
     protected function getHeaderActions(): array
     {
-        $canCreate = (app(\App\Services\PlanValidationService::class)->canCreateExam()['allowed'] ?? true);
+        $planCheck = app(\App\Services\PlanValidationService::class)->canCreateExam();
+        $canCreate = ($planCheck['allowed'] ?? true);
 
         $actions = [];
 
@@ -799,6 +834,14 @@ CRITICAL REQUIREMENTS:
                 ->icon('heroicon-o-arrow-up-on-square')
                 ->url(route('filament.user.pages.upgrade-subscription'))
                 ->openUrlInNewTab();
+            $actions[] = Action::make('planInfo')
+                ->label('Plan limit reached')
+                ->color('gray')
+                ->icon('heroicon-o-information-circle')
+                ->disabled()
+                ->extraAttributes([
+                    'title' => 'Monthly exam limit reached (' . ($planCheck['limit'] ?? 0) . '). Used: ' . ($planCheck['used'] ?? 0) . ', Remaining: ' . ($planCheck['remaining'] ?? 0)
+                ]);
         }
 
         return $actions;
