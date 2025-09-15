@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use App\Services\ImageProcessingService;
+use App\Services\PlanValidationService;
 
 class CreateQuizzes extends CreateRecord
 {
@@ -145,6 +146,27 @@ class CreateQuizzes extends CreateRecord
             }
             
             Log::info("Quiz data validated successfully");
+
+            // Enforce plan limit for monthly exams BEFORE creating the record
+            try {
+                $planValidation = (new PlanValidationService(Auth::user()))->canCreateExam();
+                if (isset($planValidation['allowed']) && $planValidation['allowed'] === false) {
+                    $limit = $planValidation['limit'] ?? 0;
+                    $used = $planValidation['used'] ?? 0;
+                    $remaining = $planValidation['remaining'] ?? 0;
+                    $message = $planValidation['message'] ?? 'Plan limit reached';
+
+                    Notification::make()
+                        ->danger()
+                        ->title('Plan limit reached')
+                        ->body($message . ". Limit: {$limit}, Used: {$used}, Remaining: {$remaining}.")
+                        ->send();
+
+                    $this->halt();
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Plan validation check failed: ' . $e->getMessage());
+            }
 
             // Create quiz record
             Log::info("Creating quiz record with data: " . json_encode($data));
