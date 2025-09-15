@@ -530,11 +530,24 @@ CRITICAL REQUIREMENTS:
             } 
             // Check for option pattern (A) or A. or A-) or A :
             elseif (preg_match('/^[A-D]\s*[\)\.\-:\]]\s*(.+)$/i', $line, $matches)) {
-                $currentOptions[] = $matches[1];
+                $optionText = trim($matches[1] ?? '');
+                if ($optionText !== '' && count($currentOptions) < 4) {
+                    $currentOptions[] = $optionText;
+                }
             } 
             // Check for correct answer pattern
             elseif (preg_match('/^(Correct Answer|Correct|Correct Option|Answer|सही उत्तर)\s*[:：]\s*([A-D])/iu', $line, $matches)) {
                 $correctAnswer = $matches[2] ?? $matches[1];
+                // If we already have a question and at least 2 options, persist immediately
+                if ($currentQuestion && count($currentOptions) >= 2) {
+                    $this->saveQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
+                    $questionCount++;
+                    Log::info("Saved question {$questionCount} (on Correct Answer line): " . substr($currentQuestion, 0, 50) . "...");
+                    // Reset for potential next question
+                    $currentQuestion = null;
+                    $currentOptions = [];
+                    $correctAnswer = null;
+                }
             } 
             // Fallback: If a standalone question line appears (ends with ?), start a new question
             elseif (!$currentQuestion && preg_match('/\?\s*$/u', $line)) {
@@ -544,8 +557,8 @@ CRITICAL REQUIREMENTS:
             }
         }
 
-        // Save last question
-        if ($currentQuestion && count($currentOptions) >= 4) {
+        // Save last question (allow if at least 3 options and a correct answer)
+        if ($currentQuestion && count($currentOptions) >= 3) {
             $this->saveQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
             $questionCount++;
             Log::info("Saved final question {$questionCount}: " . substr($currentQuestion, 0, 50) . "...");
