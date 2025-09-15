@@ -514,8 +514,8 @@ CRITICAL REQUIREMENTS:
             // Skip empty lines
             if (empty($line)) continue;
             
-            // Check for question pattern
-            if (preg_match('/^Question \d+:/i', $line)) {
+            // Check for question pattern (supports English/Hinglish/Hindi markers)
+            if (preg_match('/^(Question|Q|प्रश्न)\s*\d+[:\.]/iu', $line)) {
                 // Save previous question if exists
                 if ($currentQuestion && count($currentOptions) >= 4) {
                     $this->saveQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
@@ -524,17 +524,17 @@ CRITICAL REQUIREMENTS:
                 }
                 
                 // Start new question
-                $currentQuestion = preg_replace('/^Question \d+:\s*/i', '', $line);
+                $currentQuestion = preg_replace('/^(Question|Q|प्रश्न)\s*\d+[:\.]\s*/iu', '', $line);
                 $currentOptions = [];
                 $correctAnswer = null;
             } 
-            // Check for option pattern
-            elseif (preg_match('/^[A-D]\)\s*(.+)$/i', $line, $matches)) {
+            // Check for option pattern (A) or A. or A-)
+            elseif (preg_match('/^[A-D][\)\.\-]\s*(.+)$/i', $line, $matches)) {
                 $currentOptions[] = $matches[1];
             } 
             // Check for correct answer pattern
-            elseif (preg_match('/^Correct Answer:\s*([A-D])/i', $line, $matches)) {
-                $correctAnswer = $matches[1];
+            elseif (preg_match('/^(Correct Answer|Correct|सही उत्तर)\s*[:：]\s*([A-D])/iu', $line, $matches)) {
+                $correctAnswer = $matches[2] ?? $matches[1];
             }
         }
 
@@ -545,6 +545,9 @@ CRITICAL REQUIREMENTS:
             Log::info("Saved final question {$questionCount}: " . substr($currentQuestion, 0, 50) . "...");
         }
 
+        if ($questionCount === 0) {
+            Log::error('No questions parsed from AI response');
+        }
         Log::info("Successfully parsed {$questionCount} questions from AI response");
         return $questionCount;
     }
