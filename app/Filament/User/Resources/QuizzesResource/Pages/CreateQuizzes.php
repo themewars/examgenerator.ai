@@ -515,7 +515,7 @@ CRITICAL REQUIREMENTS:
             if (empty($line)) continue;
             
             // Check for question pattern (supports English/Hinglish/Hindi markers)
-            if (preg_match('/^(Question|Q|प्रश्न)\s*\d+[:\.]/iu', $line)) {
+            if (preg_match('/^(Question|Q|प्रश्न)\s*\d+\s*[:\.)-]/iu', $line)) {
                 // Save previous question if exists
                 if ($currentQuestion && count($currentOptions) >= 4) {
                     $this->saveQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
@@ -528,13 +528,19 @@ CRITICAL REQUIREMENTS:
                 $currentOptions = [];
                 $correctAnswer = null;
             } 
-            // Check for option pattern (A) or A. or A-)
-            elseif (preg_match('/^[A-D][\)\.\-]\s*(.+)$/i', $line, $matches)) {
+            // Check for option pattern (A) or A. or A-) or A :
+            elseif (preg_match('/^[A-D]\s*[\)\.\-:\]]\s*(.+)$/i', $line, $matches)) {
                 $currentOptions[] = $matches[1];
             } 
             // Check for correct answer pattern
             elseif (preg_match('/^(Correct Answer|Correct|Correct Option|Answer|सही उत्तर)\s*[:：]\s*([A-D])/iu', $line, $matches)) {
                 $correctAnswer = $matches[2] ?? $matches[1];
+            } 
+            // Fallback: If a standalone question line appears (ends with ?), start a new question
+            elseif (!$currentQuestion && preg_match('/\?\s*$/u', $line)) {
+                $currentQuestion = $line;
+                $currentOptions = [];
+                $correctAnswer = null;
             }
         }
 
@@ -575,10 +581,11 @@ CRITICAL REQUIREMENTS:
         $line = preg_replace('/^(सही\s*उत्तर)/u', 'Correct Answer', $line);
 
         // Normalize option markers to A) B) C) D)
-        $line = preg_replace('/^\s*\(?([A-Da-d])\)?\s*[:\.-]\s*/', strtoupper('$1') . ') ', $line);
+        $line = preg_replace('/^\s*\(?([A-Da-d])\)?\s*[:\.-\]]\s*/', strtoupper('$1') . ') ', $line);
 
-        // Normalize question marker variants like "Q. 1" -> "Question 1:"
+        // Normalize question marker variants like "Q. 1" or "1." -> "Question 1:"
         $line = preg_replace('/^\s*(Q|Que)\.?\s*(\d+)\s*[:\.-]?\s*/i', 'Question $2: ', $line);
+        $line = preg_replace('/^\s*(\d+)\s*[\)\.-]\s*/', 'Question $1: ', $line);
 
         return $line;
     }
