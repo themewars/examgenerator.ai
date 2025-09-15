@@ -601,8 +601,10 @@ class EditQuizzes extends EditRecord
             // Get quiz description for context
             $description = $quiz->quiz_description ?? 'General knowledge questions';
             
-            // Build optimized prompt for additional questions
-            $prompt = $this->buildAdditionalQuestionsPrompt($description, $questionCount);
+            // Determine target language from quiz and build language-aware prompt
+            $languageCode = $quiz->language ?? 'en';
+            $languageName = getAllLanguages()[$languageCode] ?? 'English';
+            $prompt = $this->buildAdditionalQuestionsPrompt($description, $questionCount, $languageName);
             
             Log::info("Generated prompt for additional questions: " . strlen($prompt) . " characters");
             
@@ -705,30 +707,36 @@ class EditQuizzes extends EditRecord
         return null;
     }
 
-    private function buildAdditionalQuestionsPrompt($description, $questionCount)
+    private function buildAdditionalQuestionsPrompt($description, $questionCount, $languageName = 'English')
     {
-        return "Create exactly {$questionCount} additional multiple choice questions based on: {$description}
+        $markerRule = $languageName !== 'English'
+            ? "IMPORTANT: Keep these markers EXACTLY in English (do not translate): 'Question', 'A)', 'B)', 'C)', 'D)', 'Correct Answer:'. Only translate the question text and options into {$languageName}."
+            : '';
+
+        return "Create exactly {$questionCount} additional multiple choice questions in {$languageName} based on: {$description}
 
 REQUIREMENTS:
-- Generate EXACTLY {$questionCount} questions
+- Generate EXACTLY {$questionCount} questions in {$languageName}
 - Each question must have exactly 4 options (A, B, C, D)
-- Mark the correct answer clearly
+- Mark the correct answer clearly in {$languageName}
 - Questions should be relevant and educational
 - Make sure questions are different from existing ones
 - Use this exact format:
 
-Question 1: [Your question here?]
-A) [Option 1]
-B) [Option 2] 
-C) [Option 3]
-D) [Option 4]
+{$markerRule}
+
+Question 1 ({$languageName}): [Your question here?]
+A) [Option 1 in {$languageName}]
+B) [Option 2 in {$languageName}] 
+C) [Option 3 in {$languageName}]
+D) [Option 4 in {$languageName}]
 Correct Answer: [A/B/C/D]
 
-Question 2: [Your question here?]
-A) [Option 1]
-B) [Option 2]
-C) [Option 3] 
-D) [Option 4]
+Question 2 ({$languageName}): [Your question here?]
+A) [Option 1 in {$languageName}]
+B) [Option 2 in {$languageName}]
+C) [Option 3 in {$languageName}] 
+D) [Option 4 in {$languageName}]
 Correct Answer: [A/B/C/D]
 
 Continue this pattern for all {$questionCount} questions.";
