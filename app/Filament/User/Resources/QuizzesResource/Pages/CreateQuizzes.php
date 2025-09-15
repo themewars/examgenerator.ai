@@ -804,6 +804,35 @@ CRITICAL REQUIREMENTS:
         $planCheck = app(\App\Services\PlanValidationService::class)->canCreateExam();
         $canCreateExam = ($planCheck['allowed'] ?? true);
 
+        // Fallback: recompute using active subscription window to avoid stale counters
+        if ($canCreateExam === true) {
+            try {
+                $user = auth()->user();
+                $activeSub = $user?->subscriptions()
+                    ->where('status', \App\Enums\SubscriptionStatus::ACTIVE->value)
+                    ->orderByDesc('id')->first();
+                $plan = $activeSub?->plan;
+                $limit = $plan?->exams_per_month ?? ($plan?->no_of_exam ?? 0);
+                if ($limit > 0 && $activeSub?->starts_at && $activeSub?->ends_at) {
+                    $used = \App\Models\Quiz::where('user_id', $user->id)
+                        ->whereBetween('created_at', [$activeSub->starts_at, $activeSub->ends_at])
+                        ->count();
+                    if ($used >= $limit) {
+                        $canCreateExam = false;
+                        $planCheck = [
+                            'allowed' => false,
+                            'message' => 'Monthly exam limit reached (' . $limit . ' exams).',
+                            'limit' => $limit,
+                            'used' => $used,
+                            'remaining' => 0,
+                        ];
+                    }
+                }
+            } catch (\Throwable $e) {
+                // ignore UI fallback errors
+            }
+        }
+
         $create = parent::getFormActions()[0]
             ->label(fn () => $canCreateExam ? $this->getProgressLabel() : 'Plan limit reached')
             ->color($canCreateExam ? 'primary' : 'gray')
