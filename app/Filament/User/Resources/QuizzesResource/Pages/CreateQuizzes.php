@@ -251,6 +251,25 @@ class CreateQuizzes extends CreateRecord
 
             // Parse and create questions
             $questionCount = $this->createQuestionsAndAnswers($quiz, $questions);
+
+            // Top-up: if fewer questions parsed than requested, try a second pass for the remainder
+            if ($questionCount < $maxQuestions) {
+                $remaining = $maxQuestions - $questionCount;
+                Log::info("Parsed {$questionCount}/{$maxQuestions}. Attempting top-up generation of {$remaining} questions.");
+                try {
+                    $topUpPrompt = $this->buildOptimizedPrompt($description, $remaining, $languageName);
+                    $topUpText = !empty($openaiKey)
+                        ? $this->generateWithOpenAI($topUpPrompt, $openaiKey)
+                        : (!empty($geminiKey) ? $this->generateWithGemini($topUpPrompt, $geminiKey) : null);
+                    if (!empty($topUpText)) {
+                        $added = $this->createQuestionsAndAnswers($quiz, $topUpText);
+                        $questionCount += $added;
+                        Log::info("Top-up added {$added} questions. Total now {$questionCount}.");
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('Top-up generation failed: ' . $e->getMessage());
+                }
+            }
             
             if ($questionCount == 0) {
                 Log::error("No questions parsed from AI response");
@@ -667,6 +686,11 @@ CRITICAL REQUIREMENTS:
 
     private function saveQuestion($quiz, $questionText, $options, $correctAnswer)
     {
+        // Ensure we only keep the first 4 options
+        if (count($options) > 4) {
+            $options = array_slice($options, 0, 4);
+        }
+
         $question = $quiz->questions()->create([
             'title' => $questionText,
             'type' => 0, // Multiple choice
