@@ -855,8 +855,30 @@ Continue this pattern for all {$questionCount} questions.";
 
     private function saveAdditionalQuestion($quiz, $questionText, $options, $correctAnswer)
     {
+        // Normalize options: trim, dedupe, cap/pad to 4
+        $languageCode = $quiz->language ?? 'en';
+        $languageName = getAllLanguages()[$languageCode] ?? 'English';
+        $labelNone = strtolower($languageName) === 'hindi' ? 'उपर्युक्त में से कोई नहीं' : 'None of the above';
+        $labelDontKnow = strtolower($languageName) === 'hindi' ? 'मुझे नहीं पता' : "I don't know";
+
+        $clean = [];
+        foreach ($options as $opt) {
+            $t = trim((string)$opt);
+            if ($t !== '' && !in_array($t, $clean, true)) {
+                $clean[] = $t;
+            }
+        }
+        $options = $clean;
         if (count($options) > 4) {
             $options = array_slice($options, 0, 4);
+        }
+        while (count($options) < 4) {
+            $fallback = count($options) === 2 ? $labelNone : $labelDontKnow;
+            if (!in_array($fallback, $options, true)) {
+                $options[] = $fallback;
+            } else {
+                $options[] = $fallback . ' ' . (count($options)+1);
+            }
         }
         $question = $quiz->questions()->create([
             'title' => $questionText,
