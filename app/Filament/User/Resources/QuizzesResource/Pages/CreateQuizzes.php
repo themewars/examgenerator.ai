@@ -647,10 +647,12 @@ CRITICAL REQUIREMENTS:
 
     protected function getFormActions(): array
     {
+        $canCreateExam = (app(\App\Services\PlanValidationService::class)->canCreateExam()['allowed'] ?? true);
+
         $create = parent::getFormActions()[0]
             ->label(fn () => $this->getProgressLabel())
             ->icon('heroicon-o-plus')
-            ->disabled(fn () => ((app(\App\Services\PlanValidationService::class)->canCreateExam()['allowed'] ?? true) === false))
+            ->disabled(fn () => $canCreateExam === false)
             ->extraAttributes([
                 'wire:target' => 'create',
                 'wire:loading.attr' => 'disabled',
@@ -661,7 +663,20 @@ CRITICAL REQUIREMENTS:
 
     protected function getHeaderActions(): array
     {
-        return [];
+        $canCreate = (app(\App\Services\PlanValidationService::class)->canCreateExam()['allowed'] ?? true);
+
+        $actions = [];
+
+        if (!$canCreate) {
+            $actions[] = Action::make('upgradePlan')
+                ->label(__('messages.subscription.upgrade_plan') ?: 'Upgrade Plan')
+                ->color('warning')
+                ->icon('heroicon-o-arrow-up-on-square')
+                ->url(route('filament.user.pages.upgrade-subscription'))
+                ->openUrlInNewTab();
+        }
+
+        return $actions;
     }
 
     public function mount(): void
