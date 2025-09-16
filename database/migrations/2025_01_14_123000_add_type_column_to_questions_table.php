@@ -12,7 +12,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('questions', function (Blueprint $table) {
-            $table->integer('type')->default(0)->after('title');
+            if (!Schema::hasColumn('questions', 'type')) {
+                $table->integer('type')->default(0)->after('title');
+            }
         });
     }
 
@@ -22,7 +24,9 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('questions', function (Blueprint $table) {
-            $table->dropColumn('type');
+            if (Schema::hasColumn('questions', 'type')) {
+                $table->dropColumn('type');
+            }
         });
     }
 };
