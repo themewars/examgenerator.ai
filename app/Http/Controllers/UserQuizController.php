@@ -32,14 +32,18 @@ class UserQuizController extends AppBaseController
     }
 
     /**
+     * SEO entrypoint: /{slug}/{code}
+     */
+    public function createSeo($slug, $code)
+    {
+        return $this->create($code);
+    }
+
+    /**
      * Show the quiz form based on the quiz code.
      */
-    public function create($slug, $code = null)
+    public function create($code)
     {
-        // Support both signatures: create($code) and create($slug, $code)
-        if ($code === null) {
-            $code = $slug; // legacy route /q/{code}
-        }
         // Accept codes case-insensitively and avoid unexpected redirects
         $normalized = strtoupper(trim($code));
         $quiz = Quiz::with(['questions','category'])->where('unique_code', $normalized)->first();

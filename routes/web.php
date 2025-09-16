@@ -37,7 +37,7 @@ Route::middleware('SetLanguage')->group(function () {
     Route::get('/api/exams', [ExamShowcaseController::class, 'getExams'])->name('api.exams');
 
     // Route of Quiz player (SEO + legacy)
-    Route::get('{slug}/{code}', [UserQuizController::class, 'create'])
+    Route::get('{slug}/{code}', [UserQuizController::class, 'createSeo'])
         ->where(['code' => '[A-Za-z0-9\-]+' ])
         ->name('quiz-player-seo');
 
