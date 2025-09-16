@@ -39,7 +39,7 @@ class UserQuizController extends AppBaseController
         // Accept codes case-insensitively and avoid unexpected redirects
         $normalized = strtoupper(trim($code));
         $quiz = Quiz::with('questions')->where('unique_code', $normalized)->first();
-        if (!$quiz) {
+        if (!$quiz || !$quiz->is_public) {
             abort(404);
         }
 
@@ -80,10 +80,10 @@ class UserQuizController extends AppBaseController
     {
         $normalized = strtoupper(trim($code));
         $quiz = Quiz::with('questions')->where('unique_code', $normalized)->first();
-        if ($quiz->status == 0) {
+        if ($quiz->status == 0 || !$quiz->is_public) {
             Notification::make()
                 ->title('Quiz is not active')
-                ->body('You cannot create a player for this quiz as it is not active.')
+                ->body('You cannot create a player for this quiz as it is not active or public.')
                 ->danger()
                 ->send();
 

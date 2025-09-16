@@ -39,6 +39,7 @@ class Quiz extends Model implements HasMedia
         'quiz_description',
         'user_id',
         'status',
+        'is_public',
         'type',
         'category_id',
         'diff_level',
@@ -63,6 +64,7 @@ class Quiz extends Model implements HasMedia
         'quiz_description' => 'string',
         'user_id' => 'integer',
         'status' => 'boolean',
+        'is_public' => 'boolean',
         'type' => 'integer',
         'diff_level' => 'integer',
         'quiz_type' => 'integer',
@@ -441,6 +443,10 @@ class Quiz extends Model implements HasMedia
                                         ->persistTabInQueryString(),
                                     Section::make()
                                         ->schema([
+                                            Toggle::make('is_public')
+                                                ->label('Public Exam')
+                                                ->helperText('If disabled, the public link will not be accessible.')
+                                                ->default(true),
                                             Toggle::make("time_configuration")
                                                 ->live()
                                                 ->label(__('messages.quiz.time_configuration') . ':'),
