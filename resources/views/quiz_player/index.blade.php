@@ -8,6 +8,7 @@
     <meta property="og:description" content="{{ Str::limit(strip_tags($quiz->quiz_description ?? $quiz->title), 200) }}">
     <meta property="og:url" content="{{ route('quiz-player', ['code' => $quiz->unique_code]) }}">
     <meta property="og:image" content="{{ asset('images/og-default.png') }}">
+    <meta property="og:site_name" content="{{ getAppName() }}">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{{ $quiz->title }}">
     <meta name="twitter:description" content="{{ Str::limit(strip_tags($quiz->quiz_description ?? $quiz->title), 200) }}">
@@ -22,6 +23,17 @@
       "url": "{{ route('quiz-player', ['code' => $quiz->unique_code]) }}",
       "audience": { "@type": "Audience", "audienceType": "Students" },
       "isAccessibleForFree": true
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        {"@type": "ListItem", "position": 1, "name": "Home", "item": "{{ url('/') }}"},
+        {"@type": "ListItem", "position": 2, "name": "Exams", "item": "{{ route('exam.showcase') }}"},
+        {"@type": "ListItem", "position": 3, "name": "{{ addslashes($quiz->title) }}", "item": "{{ route('quiz-player', ['code' => $quiz->unique_code]) }}"}
+      ]
     }
     </script>
 @endsection
