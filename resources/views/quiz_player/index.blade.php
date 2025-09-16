@@ -53,7 +53,6 @@
       ]
     }
     </script>
-@endsection
 @section('content')
     @php
         $firstUser = $topThree[0] ?? null;
