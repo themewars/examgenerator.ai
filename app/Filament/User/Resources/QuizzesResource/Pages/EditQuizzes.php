@@ -828,7 +828,7 @@ Continue this pattern for all {$questionCount} questions.";
         $currentOptions = [];
         $correctAnswer = null;
         $questionCount = 0;
-        $requiredOptions = ($quiz->quiz_type === \App\Models\Quiz::TRUE_FALSE) ? 2 : 4;
+        $requiredOptions = ($quiz->quiz_type === \App\Models\Quiz::TRUE_FALSE) ? 2 : (($quiz->quiz_type === \App\Models\Quiz::LONG_ANSWER) ? 0 : 4);
 
         Log::info("AI response has " . count($lines) . " lines");
 
@@ -841,7 +841,7 @@ Continue this pattern for all {$questionCount} questions.";
             // Check for question pattern (allow optional language tag)
             if (preg_match('/^(Question|Q|प्रश्न)\s*\d+(?:\s*\([^)]*\))?\s*[:\.)-]/iu', $line)) {
                 // Save previous question if exists
-                if ($currentQuestion && count($currentOptions) >= ($requiredOptions === 2 ? 2 : 4-1)) {
+                if ($currentQuestion && (($requiredOptions === 0) || count($currentOptions) >= ($requiredOptions === 2 ? 2 : 3))) {
                     $this->saveAdditionalQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
                     $questionCount++;
                     Log::info("Saved additional question {$questionCount}: " . substr($currentQuestion, 0, 50) . "...");
@@ -862,7 +862,7 @@ Continue this pattern for all {$questionCount} questions.";
             // Check for correct answer pattern
             elseif (preg_match('/^(Correct Answer|Correct|Correct Option|Answer|सही उत्तर)\s*[:：]\s*([A-D])/iu', $line, $matches)) {
                 $correctAnswer = $matches[2] ?? $matches[1];
-                if ($currentQuestion && count($currentOptions) >= ($requiredOptions === 2 ? 2 : 2)) {
+                if ($currentQuestion && (($requiredOptions === 0) || count($currentOptions) >= ($requiredOptions === 2 ? 2 : 2))) {
                     $this->saveAdditionalQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
                     $questionCount++;
                     $currentQuestion = null;
@@ -873,7 +873,7 @@ Continue this pattern for all {$questionCount} questions.";
         }
 
         // Save last question
-        if ($currentQuestion && count($currentOptions) >= ($requiredOptions === 2 ? 2 : 3)) {
+        if ($currentQuestion && (($requiredOptions === 0) || count($currentOptions) >= ($requiredOptions === 2 ? 2 : 3))) {
             $this->saveAdditionalQuestion($quiz, $currentQuestion, $currentOptions, $correctAnswer);
             $questionCount++;
             Log::info("Saved final additional question {$questionCount}: " . substr($currentQuestion, 0, 50) . "...");
@@ -885,14 +885,14 @@ Continue this pattern for all {$questionCount} questions.";
 
     private function saveAdditionalQuestion($quiz, $questionText, $options, $correctAnswer)
     {
-        // Normalize options: trim, dedupe, cap/pad to 4
+        // Normalize options: trim, dedupe, and pad to required count
         $languageCode = $quiz->language ?? 'en';
         $languageName = getAllLanguages()[$languageCode] ?? 'English';
         $labelNone = strtolower($languageName) === 'hindi' ? 'उपर्युक्त में से कोई नहीं' : 'None of the above';
         $labelDontKnow = strtolower($languageName) === 'hindi' ? 'मुझे नहीं पता' : "I don't know";
         $labelTrue = strtolower($languageName) === 'hindi' ? 'सही' : 'True';
         $labelFalse = strtolower($languageName) === 'hindi' ? 'गलत' : 'False';
-        $requiredOptions = ($quiz->quiz_type === \App\Models\Quiz::TRUE_FALSE) ? 2 : 4;
+        $requiredOptions = ($quiz->quiz_type === \App\Models\Quiz::TRUE_FALSE) ? 2 : (($quiz->quiz_type === \App\Models\Quiz::LONG_ANSWER) ? 0 : 4);
 
         $clean = [];
         foreach ($options as $opt) {
@@ -902,10 +902,10 @@ Continue this pattern for all {$questionCount} questions.";
             }
         }
         $options = $clean;
-        if (count($options) > $requiredOptions) {
+        if ($requiredOptions > 0 && count($options) > $requiredOptions) {
             $options = array_slice($options, 0, $requiredOptions);
         }
-        while (count($options) < $requiredOptions) {
+        while ($requiredOptions > 0 && count($options) < $requiredOptions) {
             if ($requiredOptions === 2) {
                 // True/False padding
                 $needed = [$labelTrue, $labelFalse];

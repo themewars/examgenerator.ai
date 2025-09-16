@@ -456,6 +456,22 @@ class CreateQuizzes extends CreateRecord
             : '';
 
         $isTrueFalse = ($quizType === \App\Models\Quiz::TRUE_FALSE);
+        $isLongAnswer = ($quizType === \App\Models\Quiz::LONG_ANSWER);
+
+        if ($isLongAnswer) {
+            return "Create exactly {$maxQuestions} LONG ANSWER questions in {$languageName} based on: {$description}
+
+REQUIREMENTS:
+- Generate EXACTLY {$maxQuestions} questions in {$languageName}
+- Do NOT include any options, choices, or answers
+- Each question should require a paragraph-style response from the student
+- Use this exact format:
+
+Question 1 ({$languageName}): [Your question here?]
+Question 2 ({$languageName}): [Your question here?]
+
+Continue this pattern for all {$maxQuestions} questions.";
+        }
 
         if ($isTrueFalse) {
             $true = ($languageName === 'Hindi') ? 'सही' : 'True';
