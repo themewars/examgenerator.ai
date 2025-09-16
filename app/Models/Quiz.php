@@ -205,7 +205,7 @@ class Quiz extends Model implements HasMedia
                 }
                 // Generate OG image asynchronously (best-effort)
                 try {
-                    \App\Services\OgImageService::generateForQuiz($quiz->unique_code, $quiz->title);
+                    \App\Jobs\GenerateOgImageJob::dispatch($quiz->unique_code, $quiz->title)->onQueue('og');
                 } catch (\Throwable $e) {
                     \Log::warning('Failed to generate OG image', ['quiz_id' => $quiz->id, 'error' => $e->getMessage()]);
                 }
