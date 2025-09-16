@@ -7,7 +7,13 @@
     <meta property="og:title" content="{{ $quiz->title }}">
     <meta property="og:description" content="{{ Str::limit(strip_tags($quiz->quiz_description ?? $quiz->title), 200) }}">
     <meta property="og:url" content="{{ route('quiz-player', ['code' => $quiz->unique_code]) }}">
-    <meta property="og:image" content="{{ asset('images/og-default.png') }}">
+    @php
+        $subjectSlug = Str::slug($quiz->category->name ?? 'default');
+        $ogImage = asset('images/og/' . $subjectSlug . '.png');
+    @endphp
+    <meta property="og:image" content="{{ $ogImage }}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
     <meta property="og:site_name" content="{{ getAppName() }}">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{{ $quiz->title }}">
