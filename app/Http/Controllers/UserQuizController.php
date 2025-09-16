@@ -34,8 +34,12 @@ class UserQuizController extends AppBaseController
     /**
      * Show the quiz form based on the quiz code.
      */
-    public function create($code)
+    public function create($slug, $code = null)
     {
+        // Support both signatures: create($code) and create($slug, $code)
+        if ($code === null) {
+            $code = $slug; // legacy route /q/{code}
+        }
         // Accept codes case-insensitively and avoid unexpected redirects
         $normalized = strtoupper(trim($code));
         $quiz = Quiz::with(['questions','category'])->where('unique_code', $normalized)->first();
