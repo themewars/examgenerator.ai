@@ -38,7 +38,10 @@ Route::middleware('SetLanguage')->group(function () {
 
     // Route of Quiz player (SEO + legacy)
     Route::get('{slug}/{code}', [UserQuizController::class, 'createSeo'])
-        ->where(['code' => '[A-Za-z0-9\-]+' ])
+        ->where([
+            'slug' => '^(?!auth$|exams$|exam$|api$|razorpay$|paypal$|q$|og$).+',
+            'code' => '[A-Z0-9]{6,12}'
+        ])
         ->name('quiz-player-seo');
 
     // Legacy routes redirect to SEO
