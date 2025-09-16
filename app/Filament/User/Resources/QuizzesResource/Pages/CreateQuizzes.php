@@ -449,11 +449,40 @@ class CreateQuizzes extends CreateRecord
         return null;
     }
 
-    private function buildOptimizedPrompt($description, $maxQuestions, $languageName = 'English')
+    private function buildOptimizedPrompt($description, $maxQuestions, $languageName = 'English', $quizType = null)
     {
         $markerRule = $languageName !== 'English'
             ? "IMPORTANT: Keep these markers EXACTLY in English (do not translate): 'Question', 'A)', 'B)', 'C)', 'D)', 'Correct Answer:'. Only translate the question text and options into {$languageName}."
             : '';
+
+        $isTrueFalse = ($quizType === \App\Models\Quiz::TRUE_FALSE);
+
+        if ($isTrueFalse) {
+            $true = ($languageName === 'Hindi') ? 'सही' : 'True';
+            $false = ($languageName === 'Hindi') ? 'गलत' : 'False';
+            return "Create exactly {$maxQuestions} TRUE/FALSE questions in {$languageName} based on: {$description}
+
+REQUIREMENTS:
+- Generate EXACTLY {$maxQuestions} questions in {$languageName}
+- Each question must have exactly 2 options: A) {$true} and B) {$false}
+- Mark the correct answer clearly using {$languageName}
+- Questions should be relevant and educational
+- Use this exact format:
+
+{$markerRule}
+
+Question 1 ({$languageName}): [Your question here?]
+A) {$true}
+B) {$false}
+Correct Answer: [A/B/C/D]
+
+Question 2 ({$languageName}): [Your question here?]
+A) {$true}
+B) {$false}
+Correct Answer: [A/B/C/D]
+
+Continue this pattern for all {$maxQuestions} questions.";
+        }
 
         return "Create exactly {$maxQuestions} multiple choice questions in {$languageName} based on: {$description}
 
