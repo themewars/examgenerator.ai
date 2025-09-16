@@ -36,9 +36,11 @@ class UserQuizController extends AppBaseController
      */
     public function create($code)
     {
-        $quiz = Quiz::with('questions')->where('unique_code', $code)->first();
+        // Accept codes case-insensitively and avoid unexpected redirects
+        $normalized = strtoupper(trim($code));
+        $quiz = Quiz::with('questions')->where('unique_code', $normalized)->first();
         if (!$quiz) {
-            return redirect()->route('home');
+            abort(404);
         }
 
         $sessionKey = 'quiz_viewed_' . $code;
@@ -76,7 +78,8 @@ class UserQuizController extends AppBaseController
 
     public function createPlayer($code)
     {
-        $quiz = Quiz::with('questions')->where('unique_code', $code)->first();
+        $normalized = strtoupper(trim($code));
+        $quiz = Quiz::with('questions')->where('unique_code', $normalized)->first();
         if ($quiz->status == 0) {
             Notification::make()
                 ->title('Quiz is not active')
