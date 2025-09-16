@@ -286,7 +286,7 @@ class EditQuizzes extends EditRecord
                             }
                             $currentQuestions = $this->record->questions()->count();
                             $remainingQuestions = $maxQuestions - $currentQuestions;
-                            return max(min($remainingQuestions, 10), 1);
+                            return max(min($remainingQuestions, 20), 1);
                         })
                         ->default(3)
                         ->required()
@@ -303,7 +303,7 @@ class EditQuizzes extends EditRecord
                                 return "You have reached the maximum questions limit for your plan ({$maxQuestions} questions).";
                             }
 
-                            return "Maximum 10 questions at a time. Plan allows {$maxQuestions} total questions. {$remainingQuestions} remaining.";
+                            return "Maximum 20 questions at a time. Plan allows {$maxQuestions} total questions. {$remainingQuestions} remaining.";
                         })
                 ])
                 ->action(function (array $data) {
@@ -570,11 +570,11 @@ class EditQuizzes extends EditRecord
                 return;
             }
             
-            if ($questionCount > 10) {
+            if ($questionCount > 20) {
                 Notification::make()
                     ->danger()
                     ->title('Too Many Questions')
-                    ->body('Maximum 10 questions can be added at a time to prevent API failures.')
+                    ->body('Maximum 20 questions can be added at a time to prevent API failures.')
                     ->send();
                 return;
             }
