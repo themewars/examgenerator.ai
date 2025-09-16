@@ -1,12 +1,21 @@
 @extends('layout.quiz_app')
-@section('title', $quiz->title . ' | ' . getAppName())
-@section('meta_description', Str::limit(strip_tags($quiz->quiz_description ?? $quiz->title), 160))
-@php($slug = Str::slug($quiz->title ?? 'exam'))
-@section('canonical', route('quiz-player-seo', ['slug' => $slug, 'code' => $quiz->unique_code]))
+@php
+    $slug = \Illuminate\Support\Str::slug($quiz->title ?? 'exam');
+    $metaDesc = \Illuminate\Support\Str::limit(strip_tags($quiz->quiz_description ?? $quiz->title), 160);
+@endphp
+@section('title')
+    {{ ($quiz->title ?? 'Exam') . ' | ' . getAppName() }}
+@endsection
+@section('meta_description')
+    {{ $metaDesc }}
+@endsection
+@section('canonical')
+    {{ route('quiz-player-seo', ['slug' => $slug, 'code' => $quiz->unique_code]) }}
+@endsection
 @section('seo')
     <meta property="og:type" content="website">
     <meta property="og:title" content="{{ $quiz->title }}">
-    <meta property="og:description" content="{{ Str::limit(strip_tags($quiz->quiz_description ?? $quiz->title), 200) }}">
+    <meta property="og:description" content="{{ \Illuminate\Support\Str::limit(strip_tags($quiz->quiz_description ?? $quiz->title), 200) }}">
     <meta property="og:url" content="{{ route('quiz-player-seo', ['slug' => $slug, 'code' => $quiz->unique_code]) }}">
     @php
         $codeImage = public_path('images/og/' . strtoupper($quiz->unique_code) . '.png');
@@ -19,7 +28,7 @@
     <meta property="og:site_name" content="{{ getAppName() }}">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="{{ $quiz->title }}">
-    <meta name="twitter:description" content="{{ Str::limit(strip_tags($quiz->quiz_description ?? $quiz->title), 200) }}">
+    <meta name="twitter:description" content="{{ \Illuminate\Support\Str::limit(strip_tags($quiz->quiz_description ?? $quiz->title), 200) }}">
     <meta name="twitter:image" content="{{ asset('images/og-default.png') }}">
     <script type="application/ld+json">
     {
