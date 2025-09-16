@@ -8,8 +8,10 @@
     <meta property="og:description" content="{{ Str::limit(strip_tags($quiz->quiz_description ?? $quiz->title), 200) }}">
     <meta property="og:url" content="{{ route('quiz-player', ['code' => $quiz->unique_code]) }}">
     @php
-        $subjectSlug = Str::slug($quiz->category->name ?? 'default');
-        $ogImage = asset('images/og/' . $subjectSlug . '.png');
+        $codeImage = public_path('images/og/' . strtoupper($quiz->unique_code) . '.png');
+        $fallback = 'images/og/default.png';
+        $ogImagePath = file_exists($codeImage) ? ('images/og/' . strtoupper($quiz->unique_code) . '.png') : $fallback;
+        $ogImage = asset($ogImagePath);
     @endphp
     <meta property="og:image" content="{{ $ogImage }}">
     <meta property="og:image:width" content="1200">

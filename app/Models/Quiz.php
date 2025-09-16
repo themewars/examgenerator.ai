@@ -203,6 +203,12 @@ class Quiz extends Model implements HasMedia
                 if ($user) {
                     (new \App\Services\PlanValidationService($user))->updateUsage(1, 0);
                 }
+                // Generate OG image asynchronously (best-effort)
+                try {
+                    \App\Services\OgImageService::generateForQuiz($quiz->unique_code, $quiz->title);
+                } catch (\Throwable $e) {
+                    \Log::warning('Failed to generate OG image', ['quiz_id' => $quiz->id, 'error' => $e->getMessage()]);
+                }
             } catch (\Throwable $e) {
                 \Log::warning('Failed to bump usage on quiz create', [
                     'quiz_id' => $quiz->id,
