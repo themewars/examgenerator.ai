@@ -890,6 +890,9 @@ Continue this pattern for all {$questionCount} questions.";
         $languageName = getAllLanguages()[$languageCode] ?? 'English';
         $labelNone = strtolower($languageName) === 'hindi' ? 'उपर्युक्त में से कोई नहीं' : 'None of the above';
         $labelDontKnow = strtolower($languageName) === 'hindi' ? 'मुझे नहीं पता' : "I don't know";
+        $labelTrue = strtolower($languageName) === 'hindi' ? 'सही' : 'True';
+        $labelFalse = strtolower($languageName) === 'hindi' ? 'गलत' : 'False';
+        $requiredOptions = ($quiz->quiz_type === \App\Models\Quiz::TRUE_FALSE) ? 2 : 4;
 
         $clean = [];
         foreach ($options as $opt) {
@@ -899,10 +902,24 @@ Continue this pattern for all {$questionCount} questions.";
             }
         }
         $options = $clean;
-        if (count($options) > 4) {
-            $options = array_slice($options, 0, 4);
+        if (count($options) > $requiredOptions) {
+            $options = array_slice($options, 0, $requiredOptions);
         }
-        while (count($options) < 4) {
+        while (count($options) < $requiredOptions) {
+            if ($requiredOptions === 2) {
+                // True/False padding
+                $needed = [$labelTrue, $labelFalse];
+                foreach ($needed as $n) {
+                    if (count($options) >= $requiredOptions) break;
+                    if (!in_array($n, $options, true)) {
+                        $options[] = $n;
+                    }
+                }
+                if (count($options) < $requiredOptions) {
+                    $options[] = $labelFalse;
+                }
+                break;
+            }
             $fallback = count($options) === 2 ? $labelNone : $labelDontKnow;
             if (!in_array($fallback, $options, true)) {
                 $options[] = $fallback;
