@@ -1,4 +1,30 @@
 @extends('layout.quiz_app')
+@section('title', $quiz->title . ' | ' . getAppName())
+@section('meta_description', Str::limit(strip_tags($quiz->quiz_description ?? $quiz->title), 160))
+@section('canonical', route('quiz-player', ['code' => $quiz->unique_code]))
+@section('seo')
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="{{ $quiz->title }}">
+    <meta property="og:description" content="{{ Str::limit(strip_tags($quiz->quiz_description ?? $quiz->title), 200) }}">
+    <meta property="og:url" content="{{ route('quiz-player', ['code' => $quiz->unique_code]) }}">
+    <meta property="og:image" content="{{ asset('images/og-default.png') }}">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{ $quiz->title }}">
+    <meta name="twitter:description" content="{{ Str::limit(strip_tags($quiz->quiz_description ?? $quiz->title), 200) }}">
+    <meta name="twitter:image" content="{{ asset('images/og-default.png') }}">
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Quiz",
+      "name": "{{ addslashes($quiz->title) }}",
+      "inLanguage": "{{ getAllLanguages()[$quiz->language] ?? 'English' }}",
+      "about": "{{ addslashes(Str::limit(strip_tags($quiz->quiz_description ?? $quiz->title), 200)) }}",
+      "url": "{{ route('quiz-player', ['code' => $quiz->unique_code]) }}",
+      "audience": { "@type": "Audience", "audienceType": "Students" },
+      "isAccessibleForFree": true
+    }
+    </script>
+@endsection
 @section('content')
     @php
         $firstUser = $topThree[0] ?? null;

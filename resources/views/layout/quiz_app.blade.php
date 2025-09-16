@@ -9,7 +9,11 @@
 
     <link rel="icon" href="{{ getFaviconUrl() }}" type="image/png">
 
-    <title>{{ getAppName() }}</title>
+    <title>@yield('title', getAppName())</title>
+    <meta name="description" content="@yield('meta_description', getSetting()->meta_description ?? getAppName())">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="@yield('canonical', url()->current())">
+    @yield('seo')
 
     <link rel="preconnect" href="//fonts.bunny.net">
     <link href="//fonts.bunny.net/css?family=figtree:400,600&display=swap" rel="stylesheet" />
