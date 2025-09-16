@@ -246,8 +246,8 @@ class CreateQuizzes extends CreateRecord
             $languageCode = $quiz->language ?? 'en';
             $languageName = getAllLanguages()[$languageCode] ?? 'English';
 
-            // Build optimized prompt with language instruction
-            $prompt = $this->buildOptimizedPrompt($description, $maxQuestions, $languageName);
+            // Build optimized prompt with language instruction and question type
+            $prompt = $this->buildOptimizedPrompt($description, $maxQuestions, $languageName, $quiz->quiz_type);
             Log::info("Generated prompt length: " . strlen($prompt));
             
             // Try OpenAI first, then Gemini
@@ -283,7 +283,7 @@ class CreateQuizzes extends CreateRecord
                 $remaining = $maxQuestions - $questionCount;
                 Log::info("Parsed {$questionCount}/{$maxQuestions}. Attempting top-up generation of {$remaining} questions.");
                 try {
-                    $topUpPrompt = $this->buildOptimizedPrompt($description, $remaining, $languageName);
+                    $topUpPrompt = $this->buildOptimizedPrompt($description, $remaining, $languageName, $quiz->quiz_type);
                     $topUpText = !empty($openaiKey)
                         ? $this->generateWithOpenAI($topUpPrompt, $openaiKey)
                         : (!empty($geminiKey) ? $this->generateWithGemini($topUpPrompt, $geminiKey) : null);
