@@ -501,7 +501,7 @@ class Quiz extends Model implements HasMedia
                         ->required(),
                     CheckboxList::make('is_correct')
                         ->options(fn($get) => collect($get('answers'))->mapWithKeys(fn($answer, $index) => [$index => $answer['title']])->toArray())
-                        ->required()
+                        ->required(fn(Get $get) => ($get('../../quiz_type') ?? 0) !== \App\Models\Quiz::LONG_ANSWER)
                         ->minItems(1)
                         ->maxItems(function (Get $get) {
                             $quizType = $get('../../quiz_type');
@@ -527,7 +527,7 @@ class Quiz extends Model implements HasMedia
                                 $set('is_correct', [$correctAnswer]);
                             }
                         })
-                        ->visible(fn(Get $get) => !empty($get('answers'))),
+                        ->visible(fn(Get $get) => (($get('../../quiz_type') ?? 0) !== \App\Models\Quiz::LONG_ANSWER) && !empty($get('answers'))),
                 ])
                 ->visible(fn(Get $get) => !empty($get('questions')))
                 ->hidden(fn(string $operation): bool => $operation === 'create')
@@ -562,9 +562,9 @@ class Quiz extends Model implements HasMedia
                     Repeater::make('answers')
                         ->label(__('messages.common.answer') . ':')
                         ->addActionLabel(__('messages.common.add_answer'))
-                        ->defaultItems(2)
-                        ->minItems(2)
-                        ->maxItems(4)
+                        ->defaultItems(fn(Get $get) => ($get('../../quiz_type') ?? 0) === \App\Models\Quiz::LONG_ANSWER ? 0 : 2)
+                        ->minItems(fn(Get $get) => ($get('../../quiz_type') ?? 0) === \App\Models\Quiz::LONG_ANSWER ? 0 : 2)
+                        ->maxItems(fn(Get $get) => ($get('../../quiz_type') ?? 0) === \App\Models\Quiz::LONG_ANSWER ? 0 : 4)
                         ->validationAttribute(__('messages.common.answer'))
                         ->grid(2)
                         ->schema([
@@ -579,7 +579,8 @@ class Quiz extends Model implements HasMedia
                                     ->label(__('messages.common.is_correct') . ':'),
                             ])->columns(4),
                         ])
-                        ->required(),
+                        ->required(fn(Get $get) => ($get('../../quiz_type') ?? 0) !== \App\Models\Quiz::LONG_ANSWER)
+                        ->visible(fn(Get $get) => ($get('../../quiz_type') ?? 0) !== \App\Models\Quiz::LONG_ANSWER),
                 ]),
 
         ];

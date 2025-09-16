@@ -162,7 +162,8 @@ class EditQuizzes extends EditRecord
 
             foreach ($questions as $index => $quizQuestion) {
 
-                if (empty($quizQuestion['answers']) || !collect($quizQuestion['answers'])->where('is_correct', true)->count()) {
+                $isLongAnswer = ($record->quiz_type === \App\Models\Quiz::LONG_ANSWER);
+                if (!$isLongAnswer && (empty($quizQuestion['answers']) || !collect($quizQuestion['answers'])->where('is_correct', true)->count())) {
                     Notification::make()
                         ->danger()
                         ->title('Question #' . ($index + 1) . ' must have at least one correct answer.')
