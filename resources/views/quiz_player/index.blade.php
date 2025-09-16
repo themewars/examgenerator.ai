@@ -1,17 +1,17 @@
 @extends('layout.quiz_app')
 @section('title', $quiz->title . ' | ' . getAppName())
 @section('meta_description', Str::limit(strip_tags($quiz->quiz_description ?? $quiz->title), 160))
-@section('canonical', route('quiz-player', ['code' => $quiz->unique_code]))
+@php($slug = Str::slug($quiz->title ?? 'exam'))
+@section('canonical', route('quiz-player-seo', ['slug' => $slug, 'code' => $quiz->unique_code]))
 @section('seo')
     <meta property="og:type" content="website">
     <meta property="og:title" content="{{ $quiz->title }}">
     <meta property="og:description" content="{{ Str::limit(strip_tags($quiz->quiz_description ?? $quiz->title), 200) }}">
-    <meta property="og:url" content="{{ route('quiz-player', ['code' => $quiz->unique_code]) }}">
+    <meta property="og:url" content="{{ route('quiz-player-seo', ['slug' => $slug, 'code' => $quiz->unique_code]) }}">
     @php
         $codeImage = public_path('images/og/' . strtoupper($quiz->unique_code) . '.png');
         $fallback = 'images/og/default.png';
-        $ogImagePath = file_exists($codeImage) ? ('images/og/' . strtoupper($quiz->unique_code) . '.png') : $fallback;
-        $ogImage = asset($ogImagePath);
+        $ogImage = route('quiz.og', ['slug' => $slug, 'code' => $quiz->unique_code])
     @endphp
     <meta property="og:image" content="{{ $ogImage }}">
     <meta property="og:image:width" content="1200">

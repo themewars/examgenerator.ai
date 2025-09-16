@@ -36,9 +36,26 @@ Route::middleware('SetLanguage')->group(function () {
     Route::get('/exam/{id}/preview', [ExamShowcaseController::class, 'preview'])->name('exam.preview');
     Route::get('/api/exams', [ExamShowcaseController::class, 'getExams'])->name('api.exams');
 
-    // Route of Quiz player
+    // Route of Quiz player (SEO + legacy)
+    Route::get('{slug}/{code}', [UserQuizController::class, 'create'])
+        ->where(['code' => '[A-Za-z0-9\-]+' ])
+        ->name('quiz-player-seo');
+
+    // Legacy routes redirect to SEO
+    Route::get('q/{code}', function ($code) {
+        $quiz = \App\Models\Quiz::where('unique_code', strtoupper($code))->first();
+        if (!$quiz) { abort(404); }
+        $slug = \Illuminate\Support\Str::slug($quiz->title ?: 'exam');
+        return redirect()->route('quiz-player-seo', ['slug' => $slug, 'code' => strtoupper($code)], 301);
+    })->name('quiz-player');
     Route::get('q/{code}/player', [UserQuizController::class, 'createPlayer'])->name('create.quiz-player');
-    Route::get('q/{code}', [UserQuizController::class, 'create'])->name('quiz-player');
+
+    // Pretty OG image proxy: /og/{slug}/{code}.png
+    Route::get('og/{slug}/{code}.png', function ($slug, $code) {
+        $path = public_path('images/og/' . strtoupper($code) . '.png');
+        if (!file_exists($path)) { $path = public_path('images/og/default.png'); }
+        return response()->file($path, ['Content-Type' => 'image/png', 'Cache-Control' => 'public, max-age=86400']);
+    })->name('quiz.og');
     Route::post('q/quiz-player', [UserQuizController::class, 'store'])->name('store.quiz-player');
     Route::get('q/quiz/question', [UserQuizController::class, 'quizQuestion'])->name('quiz.question');
     Route::post('q/quiz/answer', [UserQuizController::class, 'quizAnswer'])->name('quiz.answer');
