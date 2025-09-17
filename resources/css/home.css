@@ -769,7 +769,7 @@ section {
     margin-right: 0.75rem;
     background-color: var(--green-light);
     color: var(--green);
-    padding: 0.25rem;
+    padding: 0.2rem;
     border-radius: 50%;
 }
 
@@ -1770,7 +1770,7 @@ section {
 }
 
 .footer-logo img {
-    max-height: 50px;
+    max-height: 40px;
 }
 
 .footer-info p {
@@ -2011,6 +2011,7 @@ section {
 }
 
 @media (min-width: 1024px) {
+    .container { max-width: 1600px; }
     .grid-4-col {
         grid-template-columns: repeat(4, 1fr);
     }
