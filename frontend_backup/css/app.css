@@ -2,6 +2,17 @@
 @import "tailwindcss/components";
 @import "tailwindcss/utilities";
 
+/* Hindi Font Support */
+.hindi-text {
+    font-family: 'Noto Sans Devanagari', 'Mangal', 'Arial Unicode MS', Arial, sans-serif;
+    font-weight: 400;
+}
+
+.hindi-text-bold {
+    font-family: 'Noto Sans Devanagari', 'Mangal', 'Arial Unicode MS', Arial, sans-serif;
+    font-weight: 700;
+}
+
 @font-face {
     font-family: "Outfit";
     font-weight: 400;
