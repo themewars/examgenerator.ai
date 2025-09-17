@@ -1,16 +1,69 @@
 {
-  "resources/css/app.css": {
-    "file": "assets/app.css",
+  "resources/assets/js/pages.js": {
+    "file": "assets/pages-U9pLPGWn.js",
+    "name": "pages",
+    "src": "resources/assets/js/pages.js",
     "isEntry": true
   },
-  "resources/assets/js/pages.js": {
-    "file": "assets/pages.js",
+  "resources/css/admin.scss": {
+    "file": "assets/admin-Dqai4c4C.css",
+    "src": "resources/css/admin.scss",
     "isEntry": true
+  },
+  "resources/css/app.css": {
+    "file": "assets/app-0DfBOckj.css",
+    "src": "resources/css/app.css",
+    "isEntry": true
+  },
+  "resources/css/demo.scss": {
+    "file": "assets/demo-r4zyzUdr.css",
+    "src": "resources/css/demo.scss",
+    "isEntry": true
+  },
+  "resources/css/home.css": {
+    "file": "assets/home-CZSih3Co.css",
+    "src": "resources/css/home.css",
+    "isEntry": true
+  },
+  "resources/css/login.css": {
+    "file": "assets/login-NVUUSJ1M.css",
+    "src": "resources/css/login.css",
+    "isEntry": true
+  },
+  "resources/fonts/Helvetica-Bold.afm.json": {
+    "file": "assets/Helvetica-Bold.afm-BFJ1PFgW.json",
+    "src": "resources/fonts/Helvetica-Bold.afm.json"
+  },
+  "resources/fonts/Helvetica.afm.json": {
+    "file": "assets/Helvetica.afm-Czbh5TjQ.json",
+    "src": "resources/fonts/Helvetica.afm.json"
+  },
+  "resources/fonts/Outfit-Bold.ttf": {
+    "file": "assets/Outfit-Bold-BHHPQSxs.ttf",
+    "src": "resources/fonts/Outfit-Bold.ttf"
+  },
+  "resources/fonts/Outfit-Medium.ttf": {
+    "file": "assets/Outfit-Medium-B8Iwa1n1.ttf",
+    "src": "resources/fonts/Outfit-Medium.ttf"
+  },
+  "resources/fonts/Outfit-Regular.ttf": {
+    "file": "assets/Outfit-Regular-BlL8FXaZ.ttf",
+    "src": "resources/fonts/Outfit-Regular.ttf"
+  },
+  "resources/fonts/Outfit-SemiBold.ttf": {
+    "file": "assets/Outfit-SemiBold-Dyrk4jTU.ttf",
+    "src": "resources/fonts/Outfit-SemiBold.ttf"
   },
   "resources/js/app.js": {
-    "file": "assets/app.js",
+    "file": "assets/app-MGgnXtGP.js",
+    "name": "app",
+    "src": "resources/js/app.js",
+    "isEntry": true
+  },
+  "resources/js/razorpay-checkout.js": {
+    "file": "assets/razorpay-checkout-Dt8YBf02.js",
+    "name": "razorpay-checkout",
+    "src": "resources/js/razorpay-checkout.js",
     "isEntry": true
   }
 }
-
-

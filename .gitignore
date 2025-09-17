@@ -1,37 +1,50 @@
-# Large files
-*.zip
-*.tar.gz
-*.rar
-*.7z
-
-# Laravel specific
+# Laravel / PHP
 /vendor/
 /node_modules/
-/public/hot
-/public/storage
-/storage/*.key
-.env
-.env.backup
+/vendor-bin/
+.phpunit.cache/
 .phpunit.result.cache
+/.phpunit.cache/
+composer.phar
+composer.lock
+.env
+.env.*
+.env.local
+.php-cs-fixer.cache
 Homestead.json
 Homestead.yaml
-auth.json
-npm-debug.log
-yarn-error.log
+.phpstorm.meta.php
+.phpunit.result.cache
+/storage/*.key
+/storage/debugbar/
+/storage/*.log
+/storage/logs/
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/storage/framework/testing/*
+/storage/app/public/*
+/public/storage
+/public/build
+/public/hot
+# Keep these placeholders
+!storage/app/.gitignore
+!storage/framework/.gitignore
+!storage/logs/.gitignore
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
+# IDE / OS
+/.idea/
+/.vscode/
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
+# Node / Frontend
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnp.*
+.pnpm-store/
 
-# Cache
-/bootstrap/cache/*
-!/bootstrap/cache/.gitignore
+# Coverage / Reports
+/coverage/
+phpunit.xml
