@@ -23,16 +23,28 @@
     <link rel="stylesheet" href="{{ asset('css/bootstrap.min.css') }}">
 
     {{-- Vite assets (CSS/JS) --}}
-    @vite([
-        'resources/css/home.css',
-        'resources/css/app.css',
-        'resources/css/admin.scss',
-        'resources/css/demo.scss',
-        'resources/css/login.css',
-        'resources/js/app.js',
-        'resources/assets/js/pages.js',
-        'resources/js/razorpay-checkout.js',
-    ])
+    @unless (Route::currentRouteName() === 'home')
+        @vite([
+            'resources/css/home.css',
+            'resources/css/app.css',
+            'resources/css/admin.scss',
+            'resources/css/demo.scss',
+            'resources/css/login.css',
+            'resources/js/app.js',
+            'resources/assets/js/pages.js',
+            'resources/js/razorpay-checkout.js',
+        ])
+    @endunless
+
+    {{-- On homepage, load original compiled assets exactly as in org build --}}
+    @if (Route::currentRouteName() === 'home')
+        <link rel="preload" as="style" href="{{ asset('org_build/assets/home.css') }}" />
+        <link rel="preload" as="style" href="{{ asset('org_build/assets/app.css') }}" />
+        <link rel="stylesheet" href="{{ asset('org_build/assets/home.css') }}" />
+        <link rel="stylesheet" href="{{ asset('org_build/assets/app.css') }}" />
+        <script type="module" src="{{ asset('org_build/assets/app.js') }}" defer></script>
+        <script type="module" src="{{ asset('org_build/assets/pages.js') }}" defer></script>
+    @endif
 
     {{-- Fallback: directly load built assets from manifest if Vite tags are not rendered --}}
     @php
