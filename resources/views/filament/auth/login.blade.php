@@ -20,6 +20,7 @@
             });
         });
     </script>
+    @vite('resources/css/login.css')
     <div id="bg-image" data-url="{{ getLoginPageBg() }}"></div>
     <div class="login-container">
         <div class="logo-image">

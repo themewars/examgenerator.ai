@@ -44,7 +44,7 @@
                 </div>
             @endif
 
-            <h2 class="font-semibold sm:text-3xl text-2xl {{ $data['quiz']->language === 'hi' ? 'hindi-text' : '' }}" data-language="{{ $data['quiz']->language }}">
+            <h2 class="font-semibold sm:text-3xl text-2xl">
                 {{ $data['question']->title }}
             </h2>
         </div>
@@ -98,7 +98,7 @@
                                 <input type="radio" id="answer-{{ $answer->id }}" class="hidden peer" name="answer_id"
                                     value="{{ $answer->id }}" />
                             @endif
-                            <span class="text-start lg:text-xl text-lg text-gray-800 peer-checked:text-[#ca77ff] {{ $data['quiz']->language === 'hi' ? 'hindi-text' : '' }}" data-language="{{ $data['quiz']->language }}">
+                            <span class="text-start lg:text-xl text-lg text-gray-800 peer-checked:text-[#ca77ff]">
                                 {{ $answer->title }}
                             </span>
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 hidden peer-checked:block"

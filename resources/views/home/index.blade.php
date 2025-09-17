@@ -27,7 +27,7 @@
                         <div class="hero-buttons">
                             <a href="@auth {{ auth()->user()->hasRole('admin') ? route('filament.admin.pages.dashboard') : route('filament.user.pages.dashboard') }} @else {{ route('filament.auth.auth.register') }} @endauth"
                                 class="btn btn-primary btn-lg">{{ __('messages.home.get_started_free') }}</a>
-                            <a href="#about" class="btn btn-outline btn-lg" aria-label="See how it works" title="See how it works">
+                            <a href="#about" class="btn btn-outline btn-lg">
                                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
                                     xmlns="http://www.w3.org/2000/svg">
                                     <path d="M8 5.14v14l11-7-11-7z" fill="currentColor" />
@@ -53,7 +53,7 @@
                         </div>
                     </div>
                     <div class="hero-image animate-fade-in-delayed">
-                        <img src="{{ (getSetting() && !empty(getSetting()->hero_section_img)) ? getSetting()->hero_section_img : asset('images/hero-img.png') }}" alt="Hero Image"
+                        <img src="{{ getSetting()->hero_section_img ?? asset('images/hero-img.png') }}" alt="Hero Image"
                             class="hero-img hero-img-animate">
                         <!-- Decorative elements -->
                         <div class="decorative-blob decorative-blob-1"></div>
@@ -848,7 +848,7 @@
                     </div>
 
                     <div class="testimonial-slider-container">
-                        <button class="slider-arrow slider-prev" type="button" aria-label="Previous" title="Previous">
+                        <button class="slider-arrow slider-prev">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                                 <path d="M15 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                     stroke-linejoin="round" />
@@ -885,7 +885,7 @@
 
                         </div>
 
-                        <button class="slider-arrow slider-next" type="button" aria-label="Next" title="Next">
+                        <button class="slider-arrow slider-next">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
                                 <path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"
                                     stroke-linejoin="round" />
@@ -896,7 +896,7 @@
                     <!-- Slider dots -->
                     <div class="slider-dots">
                         @foreach ($testimonials->chunk(2) as $twoTestimonial)
-                            <button class="slider-dot {{ $loop->first ? 'active' : '' }}" type="button" aria-label="Go to slide {{ $loop->index + 1 }}"
+                            <button class="slider-dot {{ $loop->first ? 'active' : '' }}"
                                 data-slide="{{ $loop->index }}"></button>
                         @endforeach
                     </div>

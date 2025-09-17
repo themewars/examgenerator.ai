@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ $exam->title }} - Exam Preview | ExamGenerator AI</title>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;700&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -17,16 +16,6 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 2rem;
-        }
-        
-        .hindi-text {
-            font-family: 'Noto Sans Devanagari', 'Mangal', 'Arial Unicode MS', Arial, sans-serif;
-            font-weight: 400;
-        }
-        
-        .hindi-text-bold {
-            font-family: 'Noto Sans Devanagari', 'Mangal', 'Arial Unicode MS', Arial, sans-serif;
-            font-weight: 700;
         }
         
         .exam-preview-container {
@@ -210,7 +199,7 @@
 
     <div class="exam-preview-container">
         <div class="exam-header">
-            <h1 class="exam-title {{ $exam->language === 'hi' ? 'hindi-text' : '' }}" data-language="{{ $exam->language }}">{{ $exam->title }}</h1>
+            <h1 class="exam-title">{{ $exam->title }}</h1>
             <div class="exam-meta">
                 <div class="meta-item">
                     <i class="fas fa-file-alt"></i>
@@ -231,7 +220,7 @@
             @if($exam->quiz_description)
             <div class="exam-description">
                 <h3>Exam Description</h3>
-                <p class="{{ $exam->language === 'hi' ? 'hindi-text' : '' }}" data-language="{{ $exam->language }}">{{ $exam->quiz_description }}</p>
+                <p>{{ $exam->quiz_description }}</p>
             </div>
             @endif
 
@@ -240,12 +229,12 @@
                 
                 @foreach($exam->questions->take(3) as $index => $question)
                 <div class="question-item">
-                    <div class="question-text {{ $exam->language === 'hi' ? 'hindi-text' : '' }}" data-language="{{ $exam->language }}">
+                    <div class="question-text">
                         {{ $index + 1 }}. {{ $question->title }}
                     </div>
                     <div class="answer-options">
                         @foreach($question->answers as $answer)
-                        <div class="answer-option {{ $answer->is_correct ? 'correct' : '' }} {{ $exam->language === 'hi' ? 'hindi-text' : '' }}" data-language="{{ $exam->language }}">
+                        <div class="answer-option {{ $answer->is_correct ? 'correct' : '' }}">
                             {{ chr(65 + $loop->index) }}) {{ $answer->title }}
                             @if($answer->is_correct)
                                 <i class="fas fa-check" style="color: #28a745; margin-left: 0.5rem;"></i>

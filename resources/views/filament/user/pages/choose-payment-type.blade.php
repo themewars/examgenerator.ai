@@ -291,96 +291,98 @@
             </div>
         @endif --}}
     </div>
-    <script src="{{ asset('js/jquery/jquery.min.js') }}"></script>
-    <script>
-        $(document).ready(function() {
-            window.listenClick = function(selector, callback) {
-                $(document).on('click', selector, callback)
-            }
+</section>
 
-            listenClick('#razorpayPayment', function(e) {
-                e.preventDefault();
-                let planInput = $('#planInput').val();
-                let plan = JSON.parse(planInput);
+@vite('resources/js/razorpay-checkout.js')
+<script src="{{ asset('js/jquery/jquery.min.js') }}"></script>
+<script>
+    $(document).ready(function() {
+        window.listenClick = function(selector, callback) {
+            $(document).on('click', selector, callback)
+        }
 
-                $.ajax({
-                    url: "{{ route('razorpay.purchase') }}",
-                    type: "POST",
-                    dataType: "json",
-                    contentType: 'application/json',
-                    data: JSON.stringify({
-                        plan: plan
-                    }),
-                    headers: {
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')
-                            .getAttribute('content')
-                    },
-                    success: function(result) {
-                        const options = {
-                            key: "{{ getPaymentSetting()->razorpay_key }}",
-                            amount: result.data.payable_amount * 100,
-                            currency: result.data.currency,
-                            name: "{{ $plan->name }}",
-                            description: 'Purchase Plan',
-                            order_id: result.data.order_id,
-                            handler: function(response) {
-                                $.ajax({
-                                    url: "{{ route('razorpay.success') }}",
-                                    type: "POST",
-                                    dataType: "json",
-                                    contentType: 'application/json',
-                                    data: JSON.stringify({
-                                        razorpay_payment_id: response
-                                            .razorpay_payment_id,
-                                        razorpay_order_id: response
-                                            .razorpay_order_id,
-                                        razorpay_signature: response
-                                            .razorpay_signature
-                                    }),
-                                    headers: {
-                                        'X-CSRF-TOKEN': document.querySelector(
-                                                'meta[name="csrf-token"]')
-                                            .getAttribute('content')
-                                    },
-                                    success: function(result) {
-                                        new FilamentNotification()
-                                            .title(result.message)
-                                            .success()
-                                            .send();
-                                        setTimeout(function() {
-                                            window.location.href =
-                                                result.redirect;
-                                        }, 1000);
-                                    }
-                                });
-                            },
-                            theme: {
-                                color: '#4637d8'
-                            },
-                            'modal': {
-                                'ondismiss': function() {
-                                    redirect = "{{ route('razorpay.failed') }}";
-                                    window.location.href = redirect;
+        listenClick('#razorpayPayment', function(e) {
+            e.preventDefault();
+            let planInput = $('#planInput').val();
+            let plan = JSON.parse(planInput);
+
+            $.ajax({
+                url: "{{ route('razorpay.purchase') }}",
+                type: "POST",
+                dataType: "json",
+                contentType: 'application/json',
+                data: JSON.stringify({
+                    plan: plan
+                }),
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')
+                        .getAttribute('content')
+                },
+                success: function(result) {
+                    const options = {
+                        key: "{{ getPaymentSetting()->razorpay_key }}",
+                        amount: result.data.payable_amount * 100,
+                        currency: result.data.currency,
+                        name: "{{ $plan->name }}",
+                        description: 'Purchase Plan',
+                        order_id: result.data.order_id,
+                        handler: function(response) {
+                            $.ajax({
+                                url: "{{ route('razorpay.success') }}",
+                                type: "POST",
+                                dataType: "json",
+                                contentType: 'application/json',
+                                data: JSON.stringify({
+                                    razorpay_payment_id: response
+                                        .razorpay_payment_id,
+                                    razorpay_order_id: response
+                                        .razorpay_order_id,
+                                    razorpay_signature: response
+                                        .razorpay_signature
+                                }),
+                                headers: {
+                                    'X-CSRF-TOKEN': document.querySelector(
+                                            'meta[name="csrf-token"]')
+                                        .getAttribute('content')
                                 },
-                            }
-                        };
-                        const rzp = new Razorpay(options);
-                        rzp.open();
-                    },
-                    error: function(xhr){
-                        let message = 'Payment initialization failed.';
-                        try {
-                            const json = xhr.responseJSON || JSON.parse(xhr.responseText);
-                            if (json && json.message) message = json.message;
-                        } catch (e) {}
-                        if (window.FilamentNotification) {
-                            new FilamentNotification().title(message).danger().send();
-                        } else {
-                            alert(message);
+                                success: function(result) {
+                                    new FilamentNotification()
+                                        .title(result.message)
+                                        .success()
+                                        .send();
+                                    setTimeout(function() {
+                                        window.location.href =
+                                            result.redirect;
+                                    }, 1000);
+                                }
+                            });
+                        },
+                        theme: {
+                            color: '#4637d8'
+                        },
+                        'modal': {
+                            'ondismiss': function() {
+                                redirect = "{{ route('razorpay.failed') }}";
+                                window.location.href = redirect;
+                            },
                         }
+                    };
+                    const rzp = new Razorpay(options);
+                    rzp.open();
+                },
+                error: function(xhr){
+                    let message = 'Payment initialization failed.';
+                    try {
+                        const json = xhr.responseJSON || JSON.parse(xhr.responseText);
+                        if (json && json.message) message = json.message;
+                    } catch (e) {}
+                    if (window.FilamentNotification) {
+                        new FilamentNotification().title(message).danger().send();
+                    } else {
+                        alert(message);
                     }
-                });
+                }
             });
         });
-    </script>
-</section>
+    });
+</script>
