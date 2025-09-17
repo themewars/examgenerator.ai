@@ -399,7 +399,7 @@ nav {
 
 .hero-image img {
     display: block;
-    max-width: 560px;
+    max-width: 720px;
     width: 100%;
     height: auto;
     margin: 0 auto;
@@ -453,6 +453,9 @@ h1.hero-title {
 
 .hero-image {
     position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .quiz-parent-card {
@@ -1959,9 +1962,9 @@ section {
     }
 
     .hero-content {
-        grid-template-columns: 1.4fr 1fr;
+        grid-template-columns: 1fr 1fr;
         align-items: center;
-        column-gap: 3rem;
+        column-gap: 4rem;
     }
 
     .trust-badges-container {
@@ -1995,7 +1998,7 @@ section {
 }
 
 @media (min-width: 1024px) {
-    .container { max-width: 1360px; }
+.container { max-width: 1440px; }
     .grid-4-col {
         grid-template-columns: repeat(4, 1fr);
     }
