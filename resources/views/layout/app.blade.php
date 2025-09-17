@@ -18,6 +18,54 @@
     <link
         href="//fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap"
         rel="stylesheet">
+
+    {{-- Vite assets (CSS/JS) --}}
+    @vite([
+        'resources/css/home.css',
+        'resources/css/app.css',
+        'resources/css/admin.scss',
+        'resources/css/demo.scss',
+        'resources/css/login.css',
+        'resources/js/app.js',
+        'resources/assets/js/pages.js',
+        'resources/js/razorpay-checkout.js',
+    ])
+
+    {{-- Fallback: directly load built assets from manifest if Vite tags are not rendered --}}
+    @php
+        try {
+            $manifestPath = public_path('build/manifest.json');
+            if (file_exists($manifestPath)) {
+                $manifest = json_decode(file_get_contents($manifestPath), true) ?? [];
+            } else {
+                $manifest = [];
+            }
+        } catch (\Throwable $e) {
+            $manifest = [];
+        }
+    @endphp
+    @if (!empty($manifest))
+        @foreach ([
+            'resources/css/home.css',
+            'resources/css/app.css',
+            'resources/css/admin.scss',
+            'resources/css/demo.scss',
+            'resources/css/login.css',
+        ] as $cssEntry)
+            @if (!empty($manifest[$cssEntry]['file']))
+                <link rel="stylesheet" href="{{ asset('build/' . $manifest[$cssEntry]['file']) }}">
+            @endif
+        @endforeach
+        @foreach ([
+            'resources/js/app.js',
+            'resources/assets/js/pages.js',
+            'resources/js/razorpay-checkout.js',
+        ] as $jsEntry)
+            @if (!empty($manifest[$jsEntry]['file']))
+                <script type="module" src="{{ asset('build/' . $manifest[$jsEntry]['file']) }}"></script>
+            @endif
+        @endforeach
+    @endif
 </head>
 
 <body>
