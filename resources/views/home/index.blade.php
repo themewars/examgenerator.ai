@@ -53,7 +53,7 @@
                         </div>
                     </div>
                     <div class="hero-image animate-fade-in-delayed">
-                        <img src="{{ getSetting()->hero_section_img ?? asset('images/hero-img.png') }}" alt="Hero Image"
+                        <img src="{{ (getSetting() && !empty(getSetting()->hero_section_img)) ? getSetting()->hero_section_img : asset('images/hero-img.png') }}" alt="Hero Image"
                             class="hero-img hero-img-animate">
                         <!-- Decorative elements -->
                         <div class="decorative-blob decorative-blob-1"></div>
