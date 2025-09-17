@@ -105,6 +105,13 @@ img {
     height: auto;
 }
 
+/* Language flags anywhere in header/dropdowns */
+.language-dropdown img {
+    width: 28px;
+    height: 18px;
+    object-fit: cover;
+}
+
 /* Ensure small, consistent icon/avatar rendering */
 .author-avatar img,
 .testimonial-avatar img {
@@ -459,7 +466,7 @@ h1.hero-title {
 }
 
 .hero-img {
-    max-height: 540px;
+    max-height: 420px;
     width: 100%;
     height: auto;
 }
@@ -1338,8 +1345,8 @@ section {
 }
 
 .testimonial-avatar {
-    width: 4rem;
-    height: 4rem;
+    width: 3rem;
+    height: 3rem;
     border-radius: 50%;
     background: linear-gradient(to right, var(--primary), var(--purple));
     color: white;
