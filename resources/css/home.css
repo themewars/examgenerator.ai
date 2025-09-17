@@ -105,6 +105,14 @@ img {
     height: auto;
 }
 
+/* Ensure small, consistent icon/avatar rendering */
+.author-avatar img,
+.testimonial-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
 button {
     cursor: pointer;
     font-family: inherit;
@@ -450,6 +458,12 @@ h1.hero-title {
     margin: 0 auto;
 }
 
+.hero-img {
+    max-height: 540px;
+    width: 100%;
+    height: auto;
+}
+
 .quiz-parent-card {
     padding: 15px;
     max-width: 500px;
@@ -719,8 +733,8 @@ section {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 3.5rem;
-    height: 3.5rem;
+    width: 3rem;
+    height: 3rem;
     border-radius: var(--radius);
     background: linear-gradient(to right, var(--primary), var(--purple));
     color: white;
@@ -779,8 +793,8 @@ section {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 3rem;
-    height: 3rem;
+    width: 2.5rem;
+    height: 2.5rem;
     border-radius: var(--radius);
     color: white;
     margin-bottom: 1rem;
