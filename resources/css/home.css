@@ -276,9 +276,9 @@ nav {
 }
 
 .btn-outline {
-    background-color: #a9b9fe;
-    color: var(--slate-700);
-    border: 1px solid #8496fb;
+    background-color: #ffffff;
+    color: #1f2937;
+    border: 1px solid #4f46e5;
     padding: 10px 18px;
 }
 
@@ -389,6 +389,7 @@ nav {
     grid-template-columns: 1fr;
     gap: 3rem;
     margin-bottom: 4rem;
+    align-items: center;
 }
 
 .hero-text h1 {
@@ -439,6 +440,14 @@ h1.hero-title {
 
 .hero-image {
     position: relative;
+}
+
+.hero-image img {
+    display: block;
+    max-width: 720px;
+    width: 100%;
+    height: auto;
+    margin: 0 auto;
 }
 
 .quiz-parent-card {
@@ -1945,7 +1954,9 @@ section {
     }
 
     .hero-content {
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1.2fr 0.8fr;
+        column-gap: 3rem;
+        align-items: center;
     }
 
     .trust-badges-container {
