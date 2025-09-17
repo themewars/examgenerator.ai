@@ -19,6 +19,9 @@
         href="//fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@400;500;600;700&display=swap"
         rel="stylesheet">
 
+    {{-- Load original Bootstrap (from org files) before app styles to restore base sizing --}}
+    <link rel="stylesheet" href="{{ asset('css/bootstrap.min.css') }}">
+
     {{-- Vite assets (CSS/JS) --}}
     @vite([
         'resources/css/home.css',
