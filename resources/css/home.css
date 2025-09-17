@@ -396,6 +396,14 @@ nav {
     margin-bottom: 4rem;
 }
 
+.hero-image img {
+    display: block;
+    max-width: 560px;
+    width: 100%;
+    height: auto;
+    margin: 0 auto;
+}
+
 .hero-text h1 {
     font-size: 2.25rem;
     margin-bottom: 1.5rem;
@@ -1950,7 +1958,8 @@ section {
     }
 
     .hero-content {
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1.2fr 0.8fr;
+        align-items: center;
     }
 
     .trust-badges-container {
@@ -1984,6 +1993,7 @@ section {
 }
 
 @media (min-width: 1024px) {
+    .container { max-width: 1360px; }
     .grid-4-col {
         grid-template-columns: repeat(4, 1fr);
     }
