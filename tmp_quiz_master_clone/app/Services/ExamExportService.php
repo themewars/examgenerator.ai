@@ -34,15 +34,20 @@ class ExamExportService
     /**
      * Generate preview HTML
      */
-    public function generatePreviewHtml(Quiz $quiz, $template = 'standard', bool $includeInstructions = true, bool $includeAnswerKey = false, string $fontSize = 'medium')
+        public function generatePreviewHtml(Quiz $quiz, $template = 'standard', bool $includeInstructions = true, bool $includeAnswerKey = false, string $fontSize = 'medium')
     {
-        $data = $this->prepareExamData($quiz, $includeInstructions, $includeAnswerKey, $fontSize, $compactMode, $includeStudentInfo, $includeTimestamp);
-        $data['template'] = $template;
-        $data['includeInstructions'] = $includeInstructions;
-        $data['includeAnswerKey'] = $includeAnswerKey;
-        $data['fontSize'] = $fontSize;
-        
-        return view('exports.exam-paper-preview', $data)->render();
+        try {
+            $data = $this->prepareExamData($quiz, $includeInstructions, $includeAnswerKey, $fontSize, false, true, true);
+            $data['template'] = $template;
+            $data['includeInstructions'] = $includeInstructions;
+            $data['includeAnswerKey'] = $includeAnswerKey;
+            $data['fontSize'] = $fontSize;
+            
+            return view('exports.exam-paper-preview', $data)->render();
+        } catch (\Exception $e) {
+            \Log::error('Preview HTML generation failed: ' . $e->getMessage());
+            throw new \Exception('Failed to generate preview HTML: ' . $e->getMessage());
+        }
     }
 
     /**
