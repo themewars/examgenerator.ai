@@ -17,7 +17,8 @@ class HomeController extends Controller
 {
     public function index()
     {
-        if (isset(getSetting()->enable_landing_page) && getSetting()->enable_landing_page == 0) {
+        $setting = getSetting();
+        if ($setting && isset($setting->enable_landing_page) && $setting->enable_landing_page == 0) {
             if (Auth::check() && Auth::user()->hasRole('admin')) {
                 return redirect()->route('filament.admin.pages.dashboard');
             }
@@ -44,8 +45,11 @@ class HomeController extends Controller
     public function terms()
     {
         $setting = Setting::first();
+        if (!$setting) {
+            return view('home.terms', ['terms' => 'Terms and conditions not available.']);
+        }
 
-        $terms = $setting->terms_and_condition;
+        $terms = $setting->terms_and_condition ?? 'Terms and conditions not available.';
 
         return view('home.terms', compact('terms'));
     }
@@ -53,8 +57,11 @@ class HomeController extends Controller
     public function policy()
     {
         $setting = Setting::first();
+        if (!$setting) {
+            return view('home.policy', ['policy' => 'Privacy policy not available.']);
+        }
 
-        $policy = $setting->privacy_policy;
+        $policy = $setting->privacy_policy ?? 'Privacy policy not available.';
 
         return view('home.policy', compact('policy'));
     }
@@ -62,8 +69,11 @@ class HomeController extends Controller
     public function cookie()
     {
         $setting = Setting::first();
+        if (!$setting) {
+            return view('home.cookie', ['cookie' => 'Cookie policy not available.']);
+        }
 
-        $cookie = $setting->cookie_policy;
+        $cookie = $setting->cookie_policy ?? 'Cookie policy not available.';
 
         return view('home.cookie', compact('cookie'));
     }

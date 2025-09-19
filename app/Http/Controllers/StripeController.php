@@ -20,25 +20,34 @@ class StripeController extends Controller
 {
     public function __construct()
     {
-        $stripeSecret = PaymentSetting::first()->stripe_secret;
-        Stripe::setApiKey($stripeSecret);
+        $paymentSetting = PaymentSetting::first();
+        if ($paymentSetting && $paymentSetting->stripe_secret) {
+            Stripe::setApiKey($paymentSetting->stripe_secret);
+        }
     }
 
     public function purchase(Request $request)
     {
-        $plan = json_decode($request->plan);
-
-        $user = Auth::user();
-
-        $data = [
-            'user_id' => $user->id,
-            'plan_id' => $plan->id,
-        ];
-
-        $unit_amount = ! in_array($plan->currency->code, zeroDecimalCurrencies()) ? removeCommaFromNumbers($plan->payable_amount) * 100 : removeCommaFromNumbers($plan->payable_amount);
-
-
         try {
+            $plan = json_decode($request->plan);
+            
+            if (!$plan || !isset($plan->id) || !isset($plan->currency) || !isset($plan->payable_amount)) {
+                throw new \Exception('Invalid plan data provided');
+            }
+
+            $user = Auth::user();
+            if (!$user) {
+                throw new \Exception('User not authenticated');
+            }
+
+            $data = [
+                'user_id' => $user->id,
+                'plan_id' => $plan->id,
+            ];
+
+            $unit_amount = ! in_array($plan->currency->code, zeroDecimalCurrencies()) ? removeCommaFromNumbers($plan->payable_amount) * 100 : removeCommaFromNumbers($plan->payable_amount);
+
+
             $session = Session::create([
                 'payment_method_types' => ['card'],
                 'customer_email' => $user->email,
@@ -59,10 +68,17 @@ class StripeController extends Controller
             ]);
 
             return redirect($session->url);
+            
         } catch (Exception $e) {
+            \Log::error('Stripe purchase failed: ' . $e->getMessage(), [
+                'user_id' => auth()->id(),
+                'plan_data' => $request->plan ?? 'null'
+            ]);
+            
             Notification::make()
                 ->danger()
-                ->title($e->getMessage())
+                ->title('Payment Failed')
+                ->body('Unable to process payment. Please try again.')
                 ->send();
 
             return redirect()->route('filament.user.pages.manage-subscription');

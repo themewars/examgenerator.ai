@@ -51,9 +51,13 @@ if (! function_exists('pdfToText')) {
 
             $text = $pdf->getText();
 
-            // unlink($tempFilePath);
+            if ($tempFilePath && file_exists($tempFilePath)) {
+                unlink($tempFilePath);
+            }
         } catch (\Exception $e) {
-            // unlink($tempFilePath);
+            if ($tempFilePath && file_exists($tempFilePath)) {
+                unlink($tempFilePath);
+            }
             Log::error($e->getMessage());
         }
 
@@ -92,10 +96,14 @@ if (! function_exists('docxToText')) {
                     }
                 }
 
-                // unlink($tempFilePath);
+                if ($tempFilePath && file_exists($tempFilePath)) {
+                unlink($tempFilePath);
+            }
             }
         } catch (\Exception $e) {
-            // unlink($tempFilePath);
+            if ($tempFilePath && file_exists($tempFilePath)) {
+                unlink($tempFilePath);
+            }
             Log::error($e->getMessage());
         }
 
