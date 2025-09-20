@@ -71,7 +71,7 @@ class ExamExportService
                 ->setOptions([
                     'isHtml5ParserEnabled' => true,
                     'isRemoteEnabled' => true,
-                    'defaultFont' => 'arial-unicode-ms',
+                    'defaultFont' => 'NotoSansDevanagari',
                     'isPhpEnabled' => true,
                     'isJavascriptEnabled' => false,
                     'fontDir' => storage_path('fonts'),
