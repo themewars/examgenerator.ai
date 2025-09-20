@@ -71,12 +71,13 @@ class ExamExportService
                 ->setOptions([
                     'isHtml5ParserEnabled' => true,
                     'isRemoteEnabled' => true,
-                    'defaultFont' => 'NotoSansDevanagari',
+                    'defaultFont' => 'arial-unicode-ms',
                     'isPhpEnabled' => true,
                     'isJavascriptEnabled' => false,
                     'fontDir' => storage_path('fonts'),
                     'fontCache' => storage_path('fonts'),
                     'enable_font_subsetting' => false,
+                    'dpi' => 150,
                 ]);
 
             $filename = $this->generateFilename($quiz, 'pdf');

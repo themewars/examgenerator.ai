@@ -12,7 +12,7 @@
         }
         
         body {
-            font-family: 'Noto Sans Devanagari', 'arial-unicode-ms', 'Arial Unicode MS', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'arial-unicode-ms', 'Arial Unicode MS', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             line-height: 1.6;
             color: #333;
             background-color: #f8f9fa;
@@ -20,6 +20,7 @@
             text-rendering: optimizeLegibility;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
+            font-size: 14px;
         }
         
         .container {
@@ -104,6 +105,8 @@
             font-size: 16px;
             margin-bottom: 15px;
             color: #2c3e50;
+            font-family: 'arial-unicode-ms', 'Arial Unicode MS', sans-serif;
+            font-weight: 500;
         }
         
         .options {
@@ -117,6 +120,7 @@
             border-radius: 8px;
             border-left: 3px solid #6c757d;
             transition: all 0.2s ease;
+            font-family: 'arial-unicode-ms', 'Arial Unicode MS', sans-serif;
         }
         
         .option:hover {
