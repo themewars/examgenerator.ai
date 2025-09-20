@@ -77,7 +77,7 @@ class ExamExportService
                     'fontDir' => storage_path('fonts'),
                     'fontCache' => storage_path('fonts'),
                     'enable_font_subsetting' => false,
-                    'dpi' => 150,
+                    'dpi' => 200,
                 ]);
 
             $filename = $this->generateFilename($quiz, 'pdf');

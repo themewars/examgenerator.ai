@@ -20,7 +20,7 @@
             text-rendering: optimizeLegibility;
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
-            font-size: 14px;
+            font-size: 16px;
         }
         
         .container {
@@ -102,7 +102,7 @@
         }
         
         .question-text {
-            font-size: 16px;
+            font-size: 18px;
             margin-bottom: 15px;
             color: #2c3e50;
             font-family: 'arial-unicode-ms', 'Arial Unicode MS', sans-serif;
@@ -121,6 +121,7 @@
             border-left: 3px solid #6c757d;
             transition: all 0.2s ease;
             font-family: 'arial-unicode-ms', 'Arial Unicode MS', sans-serif;
+            font-size: 16px;
         }
         
         .option:hover {
