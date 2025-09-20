@@ -68,6 +68,15 @@ class ExamExportService
         
         $pdf = Pdf::loadView('exports.exam-paper-pdf', $data);
         $pdf->setPaper($pageSize, $orientation);
+        $pdf->setOptions([
+            'isHtml5ParserEnabled' => true,
+            'isRemoteEnabled' => true,
+            'defaultFont' => 'Arial Unicode MS',
+            'isPhpEnabled' => true,
+            'isJavascriptEnabled' => false,
+            'fontDir' => storage_path('fonts'),
+            'fontCache' => storage_path('fonts'),
+        ]);
         
         $filename = 'exam_' . $quiz->unique_code . '_' . time() . '.pdf';
         if ($compactMode) {
