@@ -455,6 +455,21 @@ class CreateQuizzes extends CreateRecord
             ? "IMPORTANT: Keep these markers EXACTLY in English (do not translate): 'Question', 'A)', 'B)', 'C)', 'D)', 'Correct Answer:'. Only translate the question text and options into {$languageName}."
             : '';
 
+        // Enhanced Hindi language instruction
+        $hindiInstruction = '';
+        if ($languageName === 'Hindi') {
+            $hindiInstruction = "
+LANGUAGE REQUIREMENT: Write all quiz questions and answers in NATURAL HINDI (not translated from English). Use:
+- Simple, clear Hindi words that students can easily understand
+- Common Hindi vocabulary appropriate for the grade level
+- Natural Hindi sentence structure
+- Avoid English-to-Hindi translation style
+- Use proper Hindi grammar and sentence flow
+- Make questions sound like they were originally written in Hindi by a Hindi teacher
+- Use age-appropriate Hindi words and phrases
+- Ensure questions are culturally relevant and contextually appropriate for Hindi-speaking students";
+        }
+
         $isTrueFalse = ($quizType === \App\Models\Quiz::TRUE_FALSE);
         $isLongAnswer = ($quizType === \App\Models\Quiz::LONG_ANSWER);
 
@@ -466,6 +481,8 @@ REQUIREMENTS:
 - Do NOT include any options, choices, or answers
 - Each question should require a paragraph-style response from the student
 - Use this exact format:
+
+{$hindiInstruction}
 
 Question 1 ({$languageName}): [Your question here?]
 Question 2 ({$languageName}): [Your question here?]
@@ -486,6 +503,7 @@ REQUIREMENTS:
 - Use this exact format:
 
 {$markerRule}
+{$hindiInstruction}
 
 Question 1 ({$languageName}): [Your question here?]
 A) {$true}
@@ -510,6 +528,7 @@ REQUIREMENTS:
 - Use this exact format:
 
 {$markerRule}
+{$hindiInstruction}
 
 Question 1 ({$languageName}): [Your question here?]
 A) [Option 1 in {$languageName}]
